@@ -160,6 +160,15 @@ async function main() {
     assert.equal(petarUpdate.status, 200);
     assert.equal(petarUpdate.json.task.status, "done");
 
+    const managerNotifs = await manager.request("GET", "/api/notifications");
+    assert.equal(managerNotifs.status, 200);
+    assert.ok(managerNotifs.json.unread >= 1);
+    const doneNotif = managerNotifs.json.notifications.find((n) => n.type === "task_done" && n.taskId === petarTaskId);
+    assert.ok(doneNotif);
+
+    const markRead = await manager.request("POST", `/api/notifications/${doneNotif.id}/read`, {});
+    assert.equal(markRead.status, 200);
+
     const resetPwd = await manager.request("PATCH", `/api/users/${petarId}`, {
       password: "newpass1",
     });

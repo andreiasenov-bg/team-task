@@ -89,7 +89,7 @@ function createSeedData() {
     ],
   };
 
-  return { users, tasks: [task] };
+  return { users, tasks: [task], notifications: [] };
 }
 
 function normalizeData(raw) {
@@ -100,7 +100,8 @@ function normalizeData(raw) {
     deletedAt: user.deletedAt ? Number(user.deletedAt) : undefined,
   }));
   const tasks = Array.isArray(raw.tasks) ? raw.tasks : [];
-  return { users, tasks };
+  const notifications = Array.isArray(raw.notifications) ? raw.notifications : [];
+  return { users, tasks, notifications };
 }
 
 function hashPassword(password, salt) {
@@ -267,6 +268,7 @@ function addActivity(task, userId, action, detail) {
 
 function applyTaskChanges(task, body, actor, data) {
   const changes = [];
+  let statusChangedToDone = false;
   if (typeof body.title === "string") {
     const next = body.title.trim();
     if (next && next !== task.title) {
@@ -280,6 +282,7 @@ function applyTaskChanges(task, body, actor, data) {
   }
   if (typeof body.status === "string" && STATUS.has(body.status) && body.status !== task.status) {
     changes.push(`Статус: "${task.status}" -> "${body.status}"`);
+    statusChangedToDone = body.status === "done";
     task.status = body.status;
   }
   if (typeof body.dueDate === "string" && body.dueDate !== task.dueDate) {
@@ -301,6 +304,7 @@ function applyTaskChanges(task, body, actor, data) {
   if (changes.length) {
     addActivity(task, actor.id, "Промяна", changes.join("; "));
   }
+  return { statusChangedToDone };
 }
 
 function requireAuth(req, res, data) {
@@ -587,6 +591,47 @@ async function handleRequest(req, res) {
     return;
   }
 
+  if (req.method === "GET" && pathname === "/api/notifications") {
+    const session = requireAuth(req, res, data);
+    if (!session) return;
+    const items = (data.notifications || [])
+      .filter((n) => n.toUserId === session.user.id)
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 200);
+    const unread = items.filter((n) => !n.readAt).length;
+    sendJson(res, 200, { notifications: items, unread });
+    return;
+  }
+
+  const notifReadMatch = pathname.match(/^\/api\/notifications\/([^/]+)\/read$/);
+  if (req.method === "POST" && notifReadMatch) {
+    const session = requireAuth(req, res, data);
+    if (!session) return;
+    const id = notifReadMatch[1];
+    const notif = (data.notifications || []).find((n) => n.id === id && n.toUserId === session.user.id);
+    if (!notif) {
+      sendJson(res, 404, { error: "Нотификацията не е намерена" });
+      return;
+    }
+    if (!notif.readAt) notif.readAt = now();
+    writeData(data);
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (req.method === "POST" && pathname === "/api/notifications/read-all") {
+    const session = requireAuth(req, res, data);
+    if (!session) return;
+    for (const n of data.notifications || []) {
+      if (n.toUserId === session.user.id && !n.readAt) {
+        n.readAt = now();
+      }
+    }
+    writeData(data);
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
   if (req.method === "POST" && pathname === "/api/tasks") {
     const session = requireAuth(req, res, data);
     if (!session) return;
@@ -662,9 +707,32 @@ async function handleRequest(req, res) {
       if (session.user.role !== "manager") {
         body.assigneeId = session.user.id;
       }
-      applyTaskChanges(task, body, session.user, data);
+      const { statusChangedToDone } = applyTaskChanges(task, body, session.user, data);
       task.seenBy = task.seenBy || {};
       task.seenBy[session.user.id] = now();
+
+      if (statusChangedToDone) {
+        data.notifications = data.notifications || [];
+        const managers = data.users.filter(
+          (u) =>
+            u.role === "manager" &&
+            u.active !== false &&
+            u.deleted !== true &&
+            u.id !== session.user.id
+        );
+        for (const m of managers) {
+          data.notifications.push({
+            id: crypto.randomUUID(),
+            toUserId: m.id,
+            type: "task_done",
+            taskId: task.id,
+            message: `Задача "${task.title}" е приключена от ${session.user.displayName}`,
+            createdAt: now(),
+            readAt: null,
+          });
+        }
+      }
+
       writeData(data);
       sendJson(res, 200, { task: enrichTask(task, data) });
       return;

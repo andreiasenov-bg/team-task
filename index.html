@@ -68,11 +68,25 @@
             </div>
           </label>
           <button id="logoutBtn" type="button">Изход</button>
+          <button id="notifBtn" type="button" class="btn-secondary">
+            Нотификации <span id="notifBadge" class="badge">0</span>
+          </button>
         </div>
       </header>
 
+      <div id="notifPanel" class="panel notif-panel hidden">
+        <div class="notif-header">
+          <h3>Нотификации</h3>
+          <div class="inline">
+            <button id="enableWebNotifBtn" type="button" class="btn-secondary">Разреши браузър</button>
+            <button id="readAllBtn" type="button" class="btn-secondary">Прочети всички</button>
+          </div>
+        </div>
+        <div id="notifList" class="notif-list"></div>
+      </div>
+
       <main class="layout">
-      <section class="panel form-panel">
+        <section class="panel form-panel">
         <h2>Нова задача</h2>
         <form id="taskForm">
           <label>

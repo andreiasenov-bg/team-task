@@ -35,6 +35,12 @@ const els = {
   accessHint: document.getElementById("accessHint"),
   board: document.getElementById("board"),
   detailPanel: document.getElementById("detailPanel"),
+  notifBtn: document.getElementById("notifBtn"),
+  notifBadge: document.getElementById("notifBadge"),
+  notifPanel: document.getElementById("notifPanel"),
+  notifList: document.getElementById("notifList"),
+  readAllBtn: document.getElementById("readAllBtn"),
+  enableWebNotifBtn: document.getElementById("enableWebNotifBtn"),
 };
 
 const state = {
@@ -43,7 +49,12 @@ const state = {
   tasks: [],
   selectedTaskId: null,
   filter: "all",
+  notifications: [],
+  unread: 0,
 };
+
+let notifTimer = null;
+let seenNotifIds = new Set();
 
 init();
 
@@ -62,6 +73,16 @@ function bindEvents() {
     await loadTasks();
   });
   els.userAdminList.addEventListener("click", onUserAdminClick);
+
+  els.notifBtn.addEventListener("click", () => {
+    els.notifPanel.classList.toggle("hidden");
+    if (!els.notifPanel.classList.contains("hidden")) {
+      renderNotifications();
+    }
+  });
+  els.notifList.addEventListener("click", onNotifClick);
+  els.readAllBtn.addEventListener("click", onReadAllNotifs);
+  els.enableWebNotifBtn.addEventListener("click", enableWebNotifications);
 }
 
 async function api(url, options = {}) {
@@ -110,6 +131,8 @@ async function bootstrapApp() {
   showApp();
   await loadUsers();
   await loadTasks();
+  await loadNotifications();
+  startNotifPolling();
   renderAll();
 }
 
@@ -139,6 +162,10 @@ async function onLogout() {
     state.users = [];
     state.tasks = [];
     state.selectedTaskId = null;
+    state.notifications = [];
+    state.unread = 0;
+    stopNotifPolling();
+    seenNotifIds = new Set();
     showAuth();
   }
 }
@@ -159,6 +186,37 @@ async function loadTasks() {
     state.selectedTaskId = null;
   }
   renderAll();
+}
+
+async function loadNotifications() {
+  if (!state.me) return;
+  try {
+    const result = await api("/api/notifications");
+    state.notifications = result.notifications || [];
+    state.unread = result.unread || 0;
+    if (!seenNotifIds.size) {
+      for (const n of state.notifications) seenNotifIds.add(n.id);
+    }
+    maybeShowWebNotifications();
+  } catch {
+    // ignore
+  }
+}
+
+function startNotifPolling() {
+  stopNotifPolling();
+  notifTimer = setInterval(async () => {
+    await loadNotifications();
+    renderNotifBadge();
+    if (!els.notifPanel.classList.contains("hidden")) {
+      renderNotifications();
+    }
+  }, 15000);
+}
+
+function stopNotifPolling() {
+  if (notifTimer) clearInterval(notifTimer);
+  notifTimer = null;
 }
 
 async function onAddUser() {
@@ -222,6 +280,10 @@ function renderAll() {
   renderUserAdmin();
   renderBoard();
   renderDetails();
+  renderNotifBadge();
+  if (!els.notifPanel.classList.contains("hidden")) {
+    renderNotifications();
+  }
 }
 
 function renderHeader() {
@@ -235,6 +297,7 @@ function renderHeader() {
   els.addUserBtn.disabled = !manager;
   els.taskAssignee.disabled = !manager;
   els.userAdminPanel.classList.toggle("hidden", !manager);
+  els.enableWebNotifBtn.classList.toggle("hidden", !manager);
 }
 
 function renderFilters() {
@@ -322,6 +385,96 @@ function renderUserAdmin() {
     `;
     })
     .join("");
+}
+
+function renderNotifBadge() {
+  els.notifBadge.textContent = String(state.unread || 0);
+  els.notifBadge.style.opacity = state.unread ? "1" : "0.45";
+}
+
+function renderNotifications() {
+  if (!state.me) return;
+  const items = state.notifications || [];
+  if (!items.length) {
+    els.notifList.innerHTML = `<p class="muted">Няма нотификации.</p>`;
+    return;
+  }
+  els.notifList.innerHTML = items
+    .slice(0, 50)
+    .map((n) => {
+      const unread = !n.readAt;
+      return `
+        <div class="notif-item ${unread ? "notif-unread" : ""}">
+          <div>${escapeHtml(n.message || "")}</div>
+          <div class="notif-meta">
+            ${formatDate(n.createdAt)}
+            ${
+              unread
+                ? `| <button class="btn-secondary" data-action="read-notif" data-id="${n.id}" type="button">Прочетена</button>`
+                : ""
+            }
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+async function onNotifClick(event) {
+  const btn = event.target.closest("button[data-action]");
+  if (!btn) return;
+  if (btn.dataset.action !== "read-notif") return;
+  const id = btn.dataset.id;
+  try {
+    await api(`/api/notifications/${id}/read`, { method: "POST", body: "{}" });
+    await loadNotifications();
+    renderNotifBadge();
+    renderNotifications();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function onReadAllNotifs() {
+  try {
+    await api("/api/notifications/read-all", { method: "POST", body: "{}" });
+    await loadNotifications();
+    renderNotifBadge();
+    renderNotifications();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function enableWebNotifications() {
+  if (!("Notification" in window)) {
+    alert("Този браузър не поддържа нотификации.");
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") {
+    alert("Нотификациите не са разрешени.");
+    return;
+  }
+  alert("ОК. Ще показвам браузърни нотификации при приключени задачи.");
+}
+
+function maybeShowWebNotifications() {
+  if (!isManager()) return;
+  if (!("Notification" in window)) return;
+  if (Notification.permission !== "granted") return;
+
+  for (const n of state.notifications || []) {
+    if (seenNotifIds.has(n.id)) continue;
+    seenNotifIds.add(n.id);
+    if (n.type === "task_done" && !n.readAt) {
+      try {
+        new Notification("Задача приключена", { body: n.message || "" });
+      } catch {
+        // ignore
+      }
+    }
+  }
 }
 
 async function onUserAdminClick(event) {

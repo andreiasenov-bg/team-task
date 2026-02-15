@@ -190,6 +190,58 @@ button:hover {
   color: #17365f;
 }
 
+.badge {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #17365f;
+  color: #fff;
+  font-size: 0.8rem;
+  margin-left: 6px;
+}
+
+.notif-panel {
+  margin: 14px;
+  padding: 12px;
+}
+
+.notif-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.notif-list {
+  margin-top: 10px;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.notif-item {
+  border-bottom: 1px dashed var(--line);
+  padding: 8px 4px;
+  font-size: 0.9rem;
+}
+
+.notif-item:last-child {
+  border-bottom: 0;
+}
+
+.notif-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.notif-unread {
+  background: #fff8e8;
+  border-radius: 10px;
+}
+
 .status-pill {
   display: inline-block;
   padding: 2px 8px;
