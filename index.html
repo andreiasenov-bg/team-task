@@ -41,98 +41,154 @@
     </main>
 
     <div id="appView" class="hidden">
-      <header class="topbar">
-        <div class="brand">
-          <span class="brand-dot"></span>
-          <div>
-            <p class="muted">Task Ops</p>
-            <h1>Team Board</h1>
-          </div>
-        </div>
-        <div class="controls">
-          <label>
-            Текущ потребител
-            <input id="currentUserInfo" type="text" disabled />
-            <small id="currentRoleBadge" class="muted"></small>
-          </label>
-          <label>
-            Добави потребител
-            <div class="inline">
-              <input id="newUserUsername" type="text" placeholder="username" />
-              <input id="newUserInput" type="text" placeholder="име" />
-              <input id="newUserPhone" type="text" placeholder="+359..." />
-              <input id="newUserPassword" type="password" placeholder="парола" />
-              <select id="newUserRole">
-                <option value="employee">Служител</option>
-                <option value="manager">Мениджър</option>
-              </select>
-              <button id="addUserBtn" type="button">Добави</button>
+      <div class="app-shell">
+        <nav class="sidebar">
+          <div class="brand brand--sidebar">
+            <span class="brand-dot"></span>
+            <div>
+              <p class="muted">Task Ops</p>
+              <h1>Team Board</h1>
             </div>
-          </label>
-          <button id="logoutBtn" type="button">Изход</button>
-          <button id="notifBtn" type="button" class="btn-secondary">
-            Нотификации <span id="notifBadge" class="badge">0</span>
-          </button>
-        </div>
-      </header>
-
-      <div id="notifPanel" class="panel notif-panel hidden">
-        <div class="notif-header">
-          <h3>Нотификации</h3>
-          <div class="inline">
-            <button id="enableWebNotifBtn" type="button" class="btn-secondary">Разреши браузър</button>
-            <button id="readAllBtn" type="button" class="btn-secondary">Прочети всички</button>
           </div>
+          <div class="nav">
+            <button class="nav-item" data-route="board" type="button">Board</button>
+            <button class="nav-item" data-route="people" type="button">People</button>
+            <button class="nav-item" data-route="activity" type="button">Activity</button>
+            <button class="nav-item" data-route="notifications" type="button">
+              Notifications <span id="notifBadge" class="badge">0</span>
+            </button>
+          </div>
+          <div class="sidebar-footer">
+            <label>
+              Текущ потребител
+              <input id="currentUserInfo" type="text" disabled />
+              <small id="currentRoleBadge" class="muted"></small>
+            </label>
+            <button id="logoutBtn" type="button" class="btn-secondary">Изход</button>
+          </div>
+        </nav>
+
+        <div class="content">
+          <header class="pagebar">
+            <div>
+              <h2 id="pageTitle">Board</h2>
+              <p id="pageSubtitle" class="muted"></p>
+            </div>
+            <div class="page-actions" id="pageActions"></div>
+          </header>
+
+          <section id="view-board" class="view">
+            <div class="layout">
+              <section class="panel form-panel">
+                <h3>Нова задача</h3>
+                <form id="taskForm">
+                  <label>
+                    Заглавие
+                    <input id="taskTitle" type="text" required />
+                  </label>
+                  <label>
+                    Описание
+                    <textarea id="taskDescription" rows="3"></textarea>
+                  </label>
+                  <label>
+                    Отговорник
+                    <select id="taskAssignee"></select>
+                  </label>
+                  <label>
+                    Краен срок
+                    <input id="taskDueDate" type="date" />
+                  </label>
+                  <button type="submit">Създай</button>
+                </form>
+              </section>
+
+              <section class="panel board-panel">
+                <div class="board-header">
+                  <div>
+                    <h3>Задачи</h3>
+                    <p id="accessHint" class="muted"></p>
+                  </div>
+                  <label>
+                    Филтър по човек
+                    <select id="assigneeFilter"></select>
+                  </label>
+                </div>
+                <div id="board" class="board"></div>
+              </section>
+
+              <aside class="panel detail-panel" id="detailPanel">
+                <h3>Детайли</h3>
+                <p class="muted">Избери задача от борда.</p>
+              </aside>
+            </div>
+          </section>
+
+          <section id="view-people" class="view hidden">
+            <div class="panel">
+              <div class="people-head">
+                <div>
+                  <h3>People</h3>
+                  <p class="muted">Управление на потребители (само мениджър).</p>
+                </div>
+              </div>
+
+              <div class="people-create" id="peopleCreate">
+                <h4>Добави потребител</h4>
+                <div class="inline">
+                  <input id="newUserUsername" type="text" placeholder="username" />
+                  <input id="newUserInput" type="text" placeholder="име" />
+                  <input id="newUserPhone" type="text" placeholder="+359..." />
+                  <input id="newUserPassword" type="password" placeholder="парола" />
+                  <select id="newUserRole">
+                    <option value="employee">Служител</option>
+                    <option value="manager">Мениджър</option>
+                  </select>
+                  <button id="addUserBtn" type="button">Добави</button>
+                </div>
+              </div>
+
+              <div id="userAdminPanel" class="user-admin">
+                <h4>Потребители</h4>
+                <div id="userAdminList"></div>
+              </div>
+            </div>
+          </section>
+
+          <section id="view-activity" class="view hidden">
+            <div class="panel">
+              <div class="activity-head">
+                <div>
+                  <h3>Activity</h3>
+                  <p class="muted">Глобална история (audit log).</p>
+                </div>
+                <div class="inline">
+                  <select id="auditActorFilter"></select>
+                  <select id="auditEntityFilter">
+                    <option value="">Всички</option>
+                    <option value="task">Tasks</option>
+                    <option value="user">Users</option>
+                  </select>
+                  <button id="auditRefreshBtn" type="button" class="btn-secondary">Refresh</button>
+                </div>
+              </div>
+              <div id="auditList" class="audit-list"></div>
+            </div>
+          </section>
+
+          <section id="view-notifications" class="view hidden">
+            <div class="panel">
+              <div class="notif-header">
+                <h3>Notifications</h3>
+                <div class="inline">
+                  <button id="enableWebNotifBtn" type="button" class="btn-secondary">Разреши браузър</button>
+                  <button id="readAllBtn" type="button" class="btn-secondary">Прочети всички</button>
+                </div>
+              </div>
+              <div id="notifList" class="notif-list"></div>
+            </div>
+          </section>
         </div>
-        <div id="notifList" class="notif-list"></div>
       </div>
-
-      <main class="layout">
-        <section class="panel form-panel">
-        <h2>Нова задача</h2>
-        <form id="taskForm">
-          <label>
-            Заглавие
-            <input id="taskTitle" type="text" required />
-          </label>
-          <label>
-            Описание
-            <textarea id="taskDescription" rows="3"></textarea>
-          </label>
-          <label>
-            Отговорник
-            <select id="taskAssignee"></select>
-          </label>
-          <label>
-            Краен срок
-            <input id="taskDueDate" type="date" />
-          </label>
-          <button type="submit">Създай</button>
-        </form>
-        <div id="userAdminPanel" class="user-admin">
-          <h3>Потребители</h3>
-          <p class="muted">Смяна на парола и активиране/деактивиране (само мениджър).</p>
-          <div id="userAdminList"></div>
-        </div>
-      </section>
-
-      <section class="panel board-panel">
-        <div class="board-header">
-          <h2>Задачи</h2>
-          <label>
-            Филтър по човек
-            <select id="assigneeFilter"></select>
-          </label>
-        </div>
-        <p id="accessHint" class="muted"></p>
-        <div id="board" class="board"></div>
-      </section>
-
-      <aside class="panel detail-panel" id="detailPanel">
-        <h2>Детайли</h2>
-        <p class="muted">Избери задача от борда.</p>
-      </aside>
-      </main>
     </div>
 
     <script src="./app.js"></script>

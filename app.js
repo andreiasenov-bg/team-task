@@ -3,33 +3,42 @@ const ROLE_LABELS = {
   employee: "Служител",
 };
 
-// Used by index.html to detect whether app.js executed.
-window.__TASK_APP_READY__ = true;
-
 const STATUS = [
   { key: "todo", label: "To Do", tagClass: "todo" },
   { key: "inprogress", label: "In Progress", tagClass: "inprogress" },
   { key: "done", label: "Done", tagClass: "done" },
 ];
 
+// Used by index.html to detect whether app.js executed.
+window.__TASK_APP_READY__ = true;
+
 const els = {
   authView: document.getElementById("authView"),
   appView: document.getElementById("appView"),
+
   loginForm: document.getElementById("loginForm"),
   loginUsername: document.getElementById("loginUsername"),
   loginPassword: document.getElementById("loginPassword"),
   authError: document.getElementById("authError"),
+
+  // Shell
+  pageTitle: document.getElementById("pageTitle"),
+  pageSubtitle: document.getElementById("pageSubtitle"),
+  pageActions: document.getElementById("pageActions"),
+  navItems: Array.from(document.querySelectorAll(".nav-item[data-route]")),
+
+  // Current user
   currentUserInfo: document.getElementById("currentUserInfo"),
   currentRoleBadge: document.getElementById("currentRoleBadge"),
-  newUserUsername: document.getElementById("newUserUsername"),
-  newUserInput: document.getElementById("newUserInput"),
-  newUserPhone: document.getElementById("newUserPhone"),
-  newUserPassword: document.getElementById("newUserPassword"),
-  newUserRole: document.getElementById("newUserRole"),
-  addUserBtn: document.getElementById("addUserBtn"),
   logoutBtn: document.getElementById("logoutBtn"),
-  userAdminPanel: document.getElementById("userAdminPanel"),
-  userAdminList: document.getElementById("userAdminList"),
+
+  // Views
+  viewBoard: document.getElementById("view-board"),
+  viewPeople: document.getElementById("view-people"),
+  viewActivity: document.getElementById("view-activity"),
+  viewNotifications: document.getElementById("view-notifications"),
+
+  // Board
   taskForm: document.getElementById("taskForm"),
   taskTitle: document.getElementById("taskTitle"),
   taskDescription: document.getElementById("taskDescription"),
@@ -39,33 +48,49 @@ const els = {
   accessHint: document.getElementById("accessHint"),
   board: document.getElementById("board"),
   detailPanel: document.getElementById("detailPanel"),
-  notifBtn: document.getElementById("notifBtn"),
+
+  // People
+  peopleCreate: document.getElementById("peopleCreate"),
+  newUserUsername: document.getElementById("newUserUsername"),
+  newUserInput: document.getElementById("newUserInput"),
+  newUserPhone: document.getElementById("newUserPhone"),
+  newUserPassword: document.getElementById("newUserPassword"),
+  newUserRole: document.getElementById("newUserRole"),
+  addUserBtn: document.getElementById("addUserBtn"),
+  userAdminPanel: document.getElementById("userAdminPanel"),
+  userAdminList: document.getElementById("userAdminList"),
+
+  // Notifications
   notifBadge: document.getElementById("notifBadge"),
-  notifPanel: document.getElementById("notifPanel"),
   notifList: document.getElementById("notifList"),
   readAllBtn: document.getElementById("readAllBtn"),
   enableWebNotifBtn: document.getElementById("enableWebNotifBtn"),
+
+  // Activity (audit)
+  auditActorFilter: document.getElementById("auditActorFilter"),
+  auditEntityFilter: document.getElementById("auditEntityFilter"),
+  auditRefreshBtn: document.getElementById("auditRefreshBtn"),
+  auditList: document.getElementById("auditList"),
 };
 
 const state = {
   me: null,
+  route: "board",
   users: [],
   tasks: [],
   selectedTaskId: null,
   filter: "all",
   notifications: [],
   unread: 0,
+  audit: [],
+  auditFilters: {
+    actorUserId: "",
+    entityType: "",
+  },
 };
 
 let notifTimer = null;
 let seenNotifIds = new Set();
-const hasNotifUI =
-  !!els.notifBtn &&
-  !!els.notifBadge &&
-  !!els.notifPanel &&
-  !!els.notifList &&
-  !!els.readAllBtn &&
-  !!els.enableWebNotifBtn;
 
 init();
 
@@ -91,7 +116,6 @@ function showAuthError(message) {
   if (els.authError) {
     els.authError.textContent = message;
   } else {
-    // Fallback if the DOM is out of sync.
     alert(message);
   }
 }
@@ -99,25 +123,45 @@ function showAuthError(message) {
 function bindEvents() {
   els.loginForm.addEventListener("submit", onLogin);
   els.logoutBtn.addEventListener("click", onLogout);
-  els.addUserBtn.addEventListener("click", onAddUser);
+
+  window.addEventListener("hashchange", () => {
+    applyRouteFromHash();
+    renderShell();
+  });
+
+  for (const btn of els.navItems) {
+    btn.addEventListener("click", () => {
+      const route = btn.dataset.route;
+      setRoute(route);
+    });
+  }
+
+  // Board
   els.taskForm.addEventListener("submit", onCreateTask);
   els.assigneeFilter.addEventListener("change", async () => {
     state.filter = els.assigneeFilter.value;
     await loadTasks();
   });
+
+  // People
+  els.addUserBtn.addEventListener("click", onAddUser);
   els.userAdminList.addEventListener("click", onUserAdminClick);
 
-  if (hasNotifUI) {
-    els.notifBtn.addEventListener("click", () => {
-      els.notifPanel.classList.toggle("hidden");
-      if (!els.notifPanel.classList.contains("hidden")) {
-        renderNotifications();
-      }
-    });
-    els.notifList.addEventListener("click", onNotifClick);
-    els.readAllBtn.addEventListener("click", onReadAllNotifs);
-    els.enableWebNotifBtn.addEventListener("click", enableWebNotifications);
-  }
+  // Notifications
+  els.notifList.addEventListener("click", onNotifClick);
+  els.readAllBtn.addEventListener("click", onReadAllNotifs);
+  els.enableWebNotifBtn.addEventListener("click", enableWebNotifications);
+
+  // Activity
+  els.auditRefreshBtn.addEventListener("click", loadAudit);
+  els.auditActorFilter.addEventListener("change", () => {
+    state.auditFilters.actorUserId = els.auditActorFilter.value;
+    loadAudit();
+  });
+  els.auditEntityFilter.addEventListener("change", () => {
+    state.auditFilters.entityType = els.auditEntityFilter.value;
+    loadAudit();
+  });
 }
 
 async function api(url, options = {}) {
@@ -127,10 +171,56 @@ async function api(url, options = {}) {
     ...options,
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(data.error || "Request failed");
-  }
+  if (!response.ok) throw new Error(data.error || "Request failed");
   return data;
+}
+
+function isManager() {
+  return state.me && state.me.role === "manager";
+}
+
+function setRoute(route) {
+  const allowed = new Set(["board", "people", "activity", "notifications"]);
+  const next = allowed.has(route) ? route : "board";
+  history.replaceState(null, "", `#app/${next}`);
+  applyRouteFromHash();
+  renderShell();
+  scrollToTop();
+}
+
+function applyRouteFromHash() {
+  const hash = String(location.hash || "");
+  const m = hash.match(/^#app\/([^/]+)$/);
+  const route = m ? m[1] : "board";
+  state.route = route;
+}
+
+function showAuth() {
+  state.me = null;
+  els.authView.classList.remove("hidden");
+  els.appView.classList.add("hidden");
+  history.replaceState(null, "", "#login");
+  stopNotifPolling();
+}
+
+function showApp() {
+  els.authView.classList.add("hidden");
+  els.appView.classList.remove("hidden");
+  if (!location.hash.startsWith("#app/")) {
+    history.replaceState(null, "", "#app/board");
+  }
+  applyRouteFromHash();
+  scrollToTop();
+}
+
+function scrollToTop() {
+  try {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  } catch {
+    window.scrollTo(0, 0);
+  }
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
 }
 
 async function restoreSession() {
@@ -147,50 +237,16 @@ async function restoreSession() {
   }
 }
 
-function showAuth() {
-  state.me = null;
-  els.authView.classList.remove("hidden");
-  els.appView.classList.add("hidden");
-  if (location.hash !== "#login") history.replaceState(null, "", "#login");
-  scrollToTop();
-}
-
-function showApp() {
-  els.authView.classList.add("hidden");
-  els.appView.classList.remove("hidden");
-  if (location.hash !== "#app") history.replaceState(null, "", "#app");
-  // Ensure the user lands at the top of the dashboard after login.
-  scrollToTop();
-  try {
-    els.appView.scrollIntoView({ block: "start", behavior: "auto" });
-  } catch {
-    // ignore
-  }
-}
-
-function scrollToTop() {
-  try {
-    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  } catch {
-    window.scrollTo(0, 0);
-  }
-  document.documentElement.scrollTop = 0;
-  document.body.scrollTop = 0;
-}
-
-function isManager() {
-  return state.me && state.me.role === "manager";
-}
-
 async function bootstrapApp() {
   showApp();
   await loadUsers();
   await loadTasks();
-  if (hasNotifUI) {
-    await loadNotifications();
-    startNotifPolling();
+  await loadNotifications();
+  startNotifPolling();
+  if (isManager()) {
+    await loadAudit();
   }
-  renderAll();
+  renderShell();
 }
 
 async function onLogin(event) {
@@ -206,26 +262,17 @@ async function onLogin(event) {
     });
     state.me = result.user;
 
-    // Verify the session cookie actually sticks (some browsers/settings block it).
     const meCheck = await api("/api/auth/me");
     if (!meCheck.user) {
-      showAuthError(
-        "Login OK, но сесията не се запазва (cookies са блокирани). Разреши cookies за 127.0.0.1."
-      );
+      showAuthError("Login OK, но сесията не се запазва (cookies са блокирани).");
       state.me = null;
       return;
     }
 
     els.loginForm.reset();
-    try {
-      await bootstrapApp();
-    } catch (e) {
-      showAuthError(e && e.message ? e.message : "Грешка при зареждане след вход.");
-      state.me = null;
-      showAuth();
-    }
-  } catch (error) {
-    showAuthError(error.message);
+    await bootstrapApp();
+  } catch (e) {
+    showAuthError(e.message);
   }
 }
 
@@ -238,6 +285,7 @@ async function onLogout() {
     state.selectedTaskId = null;
     state.notifications = [];
     state.unread = 0;
+    state.audit = [];
     stopNotifPolling();
     seenNotifIds = new Set();
     showAuth();
@@ -259,11 +307,9 @@ async function loadTasks() {
   if (!state.tasks.some((t) => t.id === state.selectedTaskId)) {
     state.selectedTaskId = null;
   }
-  renderAll();
 }
 
 async function loadNotifications() {
-  if (!state.me) return;
   try {
     const result = await api("/api/notifications");
     state.notifications = result.notifications || [];
@@ -282,9 +328,7 @@ function startNotifPolling() {
   notifTimer = setInterval(async () => {
     await loadNotifications();
     renderNotifBadge();
-    if (!els.notifPanel.classList.contains("hidden")) {
-      renderNotifications();
-    }
+    if (state.route === "notifications") renderNotifications();
   }, 15000);
 }
 
@@ -293,93 +337,118 @@ function stopNotifPolling() {
   notifTimer = null;
 }
 
-async function onAddUser() {
-  if (!isManager()) return;
-  const username = els.newUserUsername.value.trim().toLowerCase();
-  const displayName = els.newUserInput.value.trim();
-  const phone = els.newUserPhone.value.trim();
-  const password = els.newUserPassword.value;
-  if (!username || !displayName || password.length < 6) {
-    alert("Попълни username, име и парола (мин. 6 символа).");
+async function loadAudit() {
+  if (!isManager()) {
+    state.audit = [];
+    renderAudit();
     return;
   }
-  try {
-    await api("/api/users", {
-      method: "POST",
-      body: JSON.stringify({
-        username,
-        displayName,
-        phone,
-        password,
-        role: els.newUserRole.value,
-      }),
-    });
-    els.newUserUsername.value = "";
-    els.newUserInput.value = "";
-    els.newUserPhone.value = "";
-    els.newUserPassword.value = "";
-    await loadUsers();
-    renderAll();
-  } catch (error) {
-    alert(error.message);
-  }
+  const params = new URLSearchParams();
+  params.set("limit", "200");
+  if (state.auditFilters.actorUserId) params.set("actorUserId", state.auditFilters.actorUserId);
+  if (state.auditFilters.entityType) params.set("entityType", state.auditFilters.entityType);
+  const result = await api(`/api/audit?${params.toString()}`);
+  state.audit = result.audit || [];
+  renderAudit();
 }
 
-async function onCreateTask(event) {
-  event.preventDefault();
-  const title = els.taskTitle.value.trim();
-  if (!title) return;
-  const assigneeId = isManager()
-    ? els.taskAssignee.value || state.me.id
-    : state.me.id;
-  try {
-    const result = await api("/api/tasks", {
-      method: "POST",
-      body: JSON.stringify({
-        title,
-        description: els.taskDescription.value.trim(),
-        dueDate: els.taskDueDate.value || "",
-        assigneeId,
-      }),
-    });
-    els.taskForm.reset();
-    state.selectedTaskId = result.task.id;
-    await loadTasks();
-  } catch (error) {
-    alert(error.message);
-  }
-}
-
-function renderAll() {
+function renderShell() {
   if (!state.me) return;
-  renderHeader();
-  renderFilters();
-  renderUserAdmin();
-  renderBoard();
-  renderDetails();
-  if (hasNotifUI) {
-    renderNotifBadge();
-    if (!els.notifPanel.classList.contains("hidden")) {
-      renderNotifications();
+
+  // Nav active state + role-based availability
+  for (const btn of els.navItems) {
+    const route = btn.dataset.route;
+    const active = route === state.route;
+    btn.setAttribute("aria-current", active ? "page" : "false");
+    if (!isManager() && (route === "activity" || route === "people")) {
+      btn.disabled = true;
+      btn.title = "Нямаш достъп";
+    } else {
+      btn.disabled = false;
+      btn.title = "";
     }
   }
-}
 
-function renderHeader() {
+  // Views visibility
+  els.viewBoard.classList.toggle("hidden", state.route !== "board");
+  els.viewPeople.classList.toggle("hidden", state.route !== "people");
+  els.viewActivity.classList.toggle("hidden", state.route !== "activity");
+  els.viewNotifications.classList.toggle("hidden", state.route !== "notifications");
+
+  // Header
   els.currentUserInfo.value = `${state.me.displayName} (@${state.me.username})`;
   els.currentRoleBadge.textContent = `Роля: ${ROLE_LABELS[state.me.role]}`;
+
+  // Page copy
+  const page = {
+    title: "Board",
+    subtitle: "",
+  };
+  if (state.route === "board") {
+    page.title = "Board";
+    page.subtitle = isManager()
+      ? "Твоят екип и задачите на всички."
+      : "Само твоите задачи.";
+  } else if (state.route === "people") {
+    page.title = "People";
+    page.subtitle = isManager()
+      ? "Управление на потребители и роли."
+      : "Нямаш достъп.";
+  } else if (state.route === "activity") {
+    page.title = "Activity";
+    page.subtitle = isManager()
+      ? "Глобална история на промени (audit)."
+      : "Нямаш достъп.";
+  } else if (state.route === "notifications") {
+    page.title = "Notifications";
+    page.subtitle = "Нотификации за приключени задачи и други събития.";
+  }
+  els.pageTitle.textContent = page.title;
+  els.pageSubtitle.textContent = page.subtitle;
+  els.pageActions.innerHTML = "";
+
+  // Route-specific rendering
+  renderBoardRoute();
+  renderPeopleRoute();
+  renderActivityRoute();
+  renderNotificationsRoute();
+}
+
+function renderBoardRoute() {
+  if (state.route !== "board") return;
+  renderFilters();
+  renderBoard();
+  renderDetails();
+}
+
+function renderPeopleRoute() {
+  if (state.route !== "people") return;
   const manager = isManager();
+  els.peopleCreate.classList.toggle("hidden", !manager);
+  els.userAdminPanel.classList.toggle("hidden", !manager);
+  els.addUserBtn.disabled = !manager;
   els.newUserUsername.disabled = !manager;
   els.newUserInput.disabled = !manager;
   els.newUserPhone.disabled = !manager;
   els.newUserPassword.disabled = !manager;
   els.newUserRole.disabled = !manager;
-  els.addUserBtn.disabled = !manager;
-  els.taskAssignee.disabled = !manager;
-  els.userAdminPanel.classList.toggle("hidden", !manager);
-  if (hasNotifUI) {
-    els.enableWebNotifBtn.classList.toggle("hidden", !manager);
+  if (manager) renderUserAdmin();
+}
+
+function renderActivityRoute() {
+  if (state.route !== "activity") return;
+  if (!isManager()) {
+    els.auditList.innerHTML = `<p class="muted">Нямаш достъп до Activity.</p>`;
+    return;
   }
+  renderAuditFilters();
+  renderAudit();
+}
+
+function renderNotificationsRoute() {
+  renderNotifBadge();
+  if (state.route !== "notifications") return;
+  renderNotifications();
 }
 
 function renderFilters() {
@@ -399,20 +468,211 @@ function renderFilters() {
   els.assigneeFilter.value = manager ? state.filter : "all";
   els.assigneeFilter.disabled = !manager;
 
-  const activeUsers = state.users.filter((u) => u.active !== false);
+  const activeUsers = state.users.filter((u) => u.active !== false && u.deleted !== true);
   const assigneeUsers = manager ? activeUsers : activeUsers.filter((u) => u.id === state.me.id);
   els.taskAssignee.innerHTML = assigneeUsers
     .map((u) => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.displayName)}</option>`)
     .join("");
+  els.taskAssignee.disabled = !manager;
 
   els.accessHint.textContent = manager
     ? "Мениджърски изглед: виждаш всички задачи."
     : "Служителски изглед: виждаш само твоите задачи.";
 }
 
+async function onCreateTask(event) {
+  event.preventDefault();
+  const title = els.taskTitle.value.trim();
+  if (!title) return;
+  const assigneeId = isManager() ? els.taskAssignee.value || state.me.id : state.me.id;
+  try {
+    const result = await api("/api/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        title,
+        description: els.taskDescription.value.trim(),
+        dueDate: els.taskDueDate.value || "",
+        assigneeId,
+      }),
+    });
+    els.taskForm.reset();
+    state.selectedTaskId = result.task.id;
+    await loadTasks();
+    renderShell();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+function renderBoard() {
+  els.board.innerHTML = STATUS.map((s) => {
+    const tasks = state.tasks.filter((t) => t.status === s.key);
+    const cards = tasks
+      .map(
+        (t) => `
+      <article class="card" data-id="${t.id}">
+        <h4>${escapeHtml(t.title)}</h4>
+        <p><strong>Отговорник:</strong> ${escapeHtml(t.assigneeName || "-")}</p>
+        <p><strong>Краен срок:</strong> ${escapeHtml(t.dueDate || "-")}</p>
+        <p><strong>Видяно от:</strong> ${t.seenBy.length} души</p>
+      </article>
+    `
+      )
+      .join("");
+    return `
+      <section class="column">
+        <h3>${s.label}<span class="tag ${s.tagClass}">${tasks.length}</span></h3>
+        ${cards || `<p class="muted">Няма задачи</p>`}
+      </section>
+    `;
+  }).join("");
+
+  els.board.querySelectorAll(".card").forEach((card) => {
+    card.addEventListener("click", async () => {
+      state.selectedTaskId = card.dataset.id;
+      try {
+        await api(`/api/tasks/${card.dataset.id}/seen`, { method: "POST", body: "{}" });
+      } catch {}
+      await loadTasks();
+      renderDetails();
+    });
+  });
+}
+
+function renderDetails() {
+  const task = state.tasks.find((t) => t.id === state.selectedTaskId);
+  if (!task) {
+    els.detailPanel.innerHTML = `
+      <h3>Детайли</h3>
+      <p class="muted">Избери задача от борда.</p>
+    `;
+    return;
+  }
+
+  const manager = isManager();
+  const seenItems = task.seenBy
+    .slice()
+    .sort((a, b) => b.at - a.at)
+    .map(
+      (item) =>
+        `<p class="seen-item"><strong>${escapeHtml(item.displayName)}</strong> - ${formatDate(item.at)}</p>`
+    )
+    .join("");
+
+  const activityItems = task.activity
+    .slice()
+    .sort((a, b) => b.at - a.at)
+    .map(
+      (a) => `<p class="activity-item"><strong>${escapeHtml(a.byUser.displayName)}</strong> - ${escapeHtml(
+        a.action
+      )}<br>${escapeHtml(a.detail)}<br><span class="muted">${formatDate(a.at)}</span></p>`
+    )
+    .join("");
+
+  const assigneeOptions = (manager ? state.users : state.users.filter((u) => u.id === state.me.id))
+    .filter((u) => u.active !== false || u.id === task.assigneeId)
+    .map(
+      (u) =>
+        `<option value="${escapeHtml(u.id)}" ${u.id === task.assigneeId ? "selected" : ""}>${escapeHtml(
+          u.active === false ? `${u.displayName} (inactive)` : u.displayName
+        )}</option>`
+    )
+    .join("");
+
+  els.detailPanel.innerHTML = `
+    <h3>Детайли</h3>
+    <div class="detail-grid">
+      <label>
+        Заглавие
+        <input id="editTitle" value="${escapeHtml(task.title)}" />
+      </label>
+      <label>
+        Описание
+        <textarea id="editDescription" rows="3">${escapeHtml(task.description)}</textarea>
+      </label>
+      <label>
+        Отговорник
+        <select id="editAssignee" ${manager ? "" : "disabled"}>
+          ${assigneeOptions}
+        </select>
+      </label>
+      <label>
+        Статус
+        <select id="editStatus">
+          ${STATUS.map(
+            (s) => `<option value="${s.key}" ${task.status === s.key ? "selected" : ""}>${s.label}</option>`
+          ).join("")}
+        </select>
+      </label>
+      <label>
+        Краен срок
+        <input id="editDueDate" type="date" value="${escapeHtml(task.dueDate || "")}" />
+      </label>
+      <button id="saveTaskBtn" type="button">Запази промени</button>
+    </div>
+    <h4>Кой е видял задачата</h4>
+    <div class="seen-list">
+      ${seenItems || `<p class="muted">Все още никой не е отварял задачата.</p>`}
+    </div>
+    <h4>История на промените</h4>
+    <div class="activity-list">
+      ${activityItems || `<p class="muted">Няма активност.</p>`}
+    </div>
+  `;
+
+  document.getElementById("saveTaskBtn").addEventListener("click", async () => {
+    await saveTaskChanges(task.id);
+  });
+}
+
+async function saveTaskChanges(taskId) {
+  const payload = {
+    title: document.getElementById("editTitle").value.trim(),
+    description: document.getElementById("editDescription").value.trim(),
+    assigneeId: document.getElementById("editAssignee").value,
+    status: document.getElementById("editStatus").value,
+    dueDate: document.getElementById("editDueDate").value,
+  };
+  try {
+    await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(payload) });
+    await loadTasks();
+    if (isManager()) await loadAudit();
+    renderShell();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function onAddUser() {
+  if (!isManager()) return;
+  const username = els.newUserUsername.value.trim().toLowerCase();
+  const displayName = els.newUserInput.value.trim();
+  const phone = els.newUserPhone.value.trim();
+  const password = els.newUserPassword.value;
+  if (!username || !displayName || password.length < 6) {
+    alert("Попълни username, име и парола (мин. 6 символа).");
+    return;
+  }
+  try {
+    await api("/api/users", {
+      method: "POST",
+      body: JSON.stringify({ username, displayName, phone, password, role: els.newUserRole.value }),
+    });
+    els.newUserUsername.value = "";
+    els.newUserInput.value = "";
+    els.newUserPhone.value = "";
+    els.newUserPassword.value = "";
+    await loadUsers();
+    if (isManager()) await loadAudit();
+    renderShell();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
 function renderUserAdmin() {
   if (!isManager()) return;
-  const activeManagers = state.users.filter((u) => u.role === "manager" && u.active !== false).length;
+  const activeManagers = state.users.filter((u) => u.role === "manager" && u.active !== false && u.deleted !== true).length;
   els.userAdminList.innerHTML = state.users
     .map((u) => {
       const isSelf = u.id === state.me.id;
@@ -426,7 +686,7 @@ function renderUserAdmin() {
       return `
       <div class="user-row">
         <h4>
-          ${escapeHtml(u.displayName)} (@${escapeHtml(u.username)}) 
+          ${escapeHtml(u.displayName)} (@${escapeHtml(u.username)})
           <span class="status-pill ${statusClass}">
             ${isDeleted ? "deleted" : u.active === false ? "inactive" : "active"}
           </span>
@@ -477,22 +737,97 @@ function renderUserAdmin() {
     .join("");
 }
 
+async function onUserAdminClick(event) {
+  const btn = event.target.closest("button[data-action]");
+  if (!btn || !isManager()) return;
+  const userId = btn.dataset.userId;
+  const action = btn.dataset.action;
+  const user = state.users.find((u) => u.id === userId);
+  if (!user) return;
+
+  if (action === "save-phone") {
+    const input = document.getElementById(`phone-${userId}`);
+    const phone = input ? input.value.trim() : "";
+    try {
+      await api(`/api/users/${userId}`, { method: "PATCH", body: JSON.stringify({ phone }) });
+      await loadUsers();
+      if (isManager()) await loadAudit();
+      renderShell();
+    } catch (e) {
+      alert(e.message);
+    }
+    return;
+  }
+
+  if (action === "reset-password") {
+    const input = document.getElementById(`pwd-${userId}`);
+    const password = input ? input.value : "";
+    if (!password || password.length < 6) {
+      alert("Въведи нова парола с минимум 6 символа.");
+      return;
+    }
+    try {
+      await api(`/api/users/${userId}`, { method: "PATCH", body: JSON.stringify({ password }) });
+      if (input) input.value = "";
+      if (isManager()) await loadAudit();
+      alert(`Паролата на ${user.displayName} е сменена.`);
+    } catch (e) {
+      alert(e.message);
+    }
+    return;
+  }
+
+  if (action === "force-logout") {
+    if (!confirm(`Force logout на ${user.displayName}?`)) return;
+    try {
+      await api(`/api/users/${userId}/logout`, { method: "POST", body: "{}" });
+      if (isManager()) await loadAudit();
+      alert("Сесиите са прекратени.");
+    } catch (e) {
+      alert(e.message);
+    }
+    return;
+  }
+
+  if (action === "toggle-active") {
+    const nextActive = user.active === false;
+    try {
+      await api(`/api/users/${userId}`, { method: "PATCH", body: JSON.stringify({ active: nextActive }) });
+      await loadUsers();
+      if (isManager()) await loadAudit();
+      renderShell();
+    } catch (e) {
+      alert(e.message);
+    }
+    return;
+  }
+
+  if (action === "delete-user") {
+    if (!confirm(`Сигурен ли си, че искаш да изтриеш (soft) ${user.displayName}?`)) return;
+    try {
+      await api(`/api/users/${userId}`, { method: "DELETE" });
+      await loadUsers();
+      if (isManager()) await loadAudit();
+      renderShell();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+}
+
 function renderNotifBadge() {
-  if (!hasNotifUI) return;
   els.notifBadge.textContent = String(state.unread || 0);
   els.notifBadge.style.opacity = state.unread ? "1" : "0.45";
 }
 
 function renderNotifications() {
-  if (!hasNotifUI) return;
-  if (!state.me) return;
   const items = state.notifications || [];
   if (!items.length) {
     els.notifList.innerHTML = `<p class="muted">Няма нотификации.</p>`;
     return;
   }
   els.notifList.innerHTML = items
-    .slice(0, 50)
+    .slice(0, 80)
     .map((n) => {
       const unread = !n.readAt;
       return `
@@ -520,8 +855,7 @@ async function onNotifClick(event) {
   try {
     await api(`/api/notifications/${id}/read`, { method: "POST", body: "{}" });
     await loadNotifications();
-    renderNotifBadge();
-    renderNotifications();
+    renderNotificationsRoute();
   } catch (e) {
     alert(e.message);
   }
@@ -531,8 +865,7 @@ async function onReadAllNotifs() {
   try {
     await api("/api/notifications/read-all", { method: "POST", body: "{}" });
     await loadNotifications();
-    renderNotifBadge();
-    renderNotifications();
+    renderNotificationsRoute();
   } catch (e) {
     alert(e.message);
   }
@@ -555,235 +888,47 @@ function maybeShowWebNotifications() {
   if (!isManager()) return;
   if (!("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
-
   for (const n of state.notifications || []) {
     if (seenNotifIds.has(n.id)) continue;
     seenNotifIds.add(n.id);
     if (n.type === "task_done" && !n.readAt) {
       try {
         new Notification("Задача приключена", { body: n.message || "" });
-      } catch {
-        // ignore
-      }
-    }
-  }
-}
-
-async function onUserAdminClick(event) {
-  const btn = event.target.closest("button[data-action]");
-  if (!btn || !isManager()) return;
-  const userId = btn.dataset.userId;
-  const action = btn.dataset.action;
-  const user = state.users.find((u) => u.id === userId);
-  if (!user) return;
-
-  if (action === "reset-password") {
-    const input = document.getElementById(`pwd-${userId}`);
-    const password = input ? input.value : "";
-    if (!password || password.length < 6) {
-      alert("Въведи нова парола с минимум 6 символа.");
-      return;
-    }
-    try {
-      await api(`/api/users/${userId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ password }),
-      });
-      if (input) input.value = "";
-      alert(`Паролата на ${user.displayName} е сменена.`);
-    } catch (error) {
-      alert(error.message);
-    }
-    return;
-  }
-
-  if (action === "save-phone") {
-    const input = document.getElementById(`phone-${userId}`);
-    const phone = input ? input.value.trim() : "";
-    try {
-      await api(`/api/users/${userId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ phone }),
-      });
-      await loadUsers();
-      renderAll();
-    } catch (error) {
-      alert(error.message);
-    }
-    return;
-  }
-
-  if (action === "toggle-active") {
-    const nextActive = user.active === false;
-    try {
-      await api(`/api/users/${userId}`, {
-        method: "PATCH",
-        body: JSON.stringify({ active: nextActive }),
-      });
-      await loadUsers();
-      await loadTasks();
-    } catch (error) {
-      alert(error.message);
-    }
-  }
-
-  if (action === "force-logout") {
-    if (!confirm(`Force logout на ${user.displayName}?`)) return;
-    try {
-      await api(`/api/users/${userId}/logout`, { method: "POST", body: "{}" });
-      alert("Сесиите са прекратени.");
-    } catch (error) {
-      alert(error.message);
-    }
-    return;
-  }
-
-  if (action === "delete-user") {
-    if (!confirm(`Сигурен ли си, че искаш да изтриеш (soft) ${user.displayName}?`)) return;
-    try {
-      await api(`/api/users/${userId}`, { method: "DELETE" });
-      await loadUsers();
-      await loadTasks();
-    } catch (error) {
-      alert(error.message);
-    }
-  }
-}
-
-function renderBoard() {
-  els.board.innerHTML = STATUS.map((s) => {
-    const tasks = state.tasks.filter((t) => t.status === s.key);
-    const cards = tasks
-      .map(
-        (t) => `
-      <article class="card" data-id="${t.id}">
-        <h4>${escapeHtml(t.title)}</h4>
-        <p><strong>Отговорник:</strong> ${escapeHtml(t.assigneeName || "-")}</p>
-        <p><strong>Краен срок:</strong> ${escapeHtml(t.dueDate || "-")}</p>
-        <p><strong>Видяно от:</strong> ${t.seenBy.length} души</p>
-      </article>
-    `
-      )
-      .join("");
-    return `
-      <section class="column">
-        <h3>${s.label}<span class="tag ${s.tagClass}">${tasks.length}</span></h3>
-        ${cards || `<p class="muted">Няма задачи</p>`}
-      </section>
-    `;
-  }).join("");
-
-  els.board.querySelectorAll(".card").forEach((card) => {
-    card.addEventListener("click", async () => {
-      state.selectedTaskId = card.dataset.id;
-      try {
-        await api(`/api/tasks/${card.dataset.id}/seen`, { method: "POST", body: "{}" });
       } catch {}
-      await loadTasks();
-    });
-  });
+    }
+  }
 }
 
-function renderDetails() {
-  const task = state.tasks.find((t) => t.id === state.selectedTaskId);
-  if (!task) {
-    els.detailPanel.innerHTML = `
-      <h2>Детайли</h2>
-      <p class="muted">Избери задача от борда.</p>
-    `;
+function renderAuditFilters() {
+  if (!isManager()) return;
+  const actorOptions = [
+    `<option value="">Всички хора</option>`,
+    ...state.users.map((u) => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.displayName)}</option>`),
+  ].join("");
+  els.auditActorFilter.innerHTML = actorOptions;
+  els.auditActorFilter.value = state.auditFilters.actorUserId || "";
+  els.auditEntityFilter.value = state.auditFilters.entityType || "";
+}
+
+function renderAudit() {
+  if (!isManager()) return;
+  const items = state.audit || [];
+  if (!items.length) {
+    els.auditList.innerHTML = `<p class="muted">Няма активност.</p>`;
     return;
   }
-
-  const manager = isManager();
-  const seenItems = task.seenBy
-    .slice()
-    .sort((a, b) => b.at - a.at)
-    .map((item) => `<p class="seen-item"><strong>${escapeHtml(item.displayName)}</strong> - ${formatDate(item.at)}</p>`)
+  els.auditList.innerHTML = items
+    .map((a) => {
+      const actor = a.actor ? `${a.actor.displayName} (@${a.actor.username})` : "Unknown";
+      const meta = `${formatDate(a.at)} | ${escapeHtml(actor)} | ${escapeHtml(a.action)}`;
+      return `
+        <div class="audit-item">
+          <div><strong>${escapeHtml(a.detail || a.action)}</strong></div>
+          <div class="notif-meta">${meta}</div>
+        </div>
+      `;
+    })
     .join("");
-
-  const activityItems = task.activity
-    .slice()
-    .sort((a, b) => b.at - a.at)
-    .map(
-      (a) => `<p class="activity-item"><strong>${escapeHtml(a.byUser.displayName)}</strong> - ${escapeHtml(
-        a.action
-      )}<br>${escapeHtml(a.detail)}<br><span class="muted">${formatDate(a.at)}</span></p>`
-    )
-    .join("");
-
-  const assigneeOptions = (manager ? state.users : state.users.filter((u) => u.id === state.me.id))
-    .filter((u) => u.active !== false || u.id === task.assigneeId)
-    .map(
-      (u) =>
-        `<option value="${escapeHtml(u.id)}" ${u.id === task.assigneeId ? "selected" : ""}>${escapeHtml(
-          u.active === false ? `${u.displayName} (inactive)` : u.displayName
-        )}</option>`
-    )
-    .join("");
-
-  els.detailPanel.innerHTML = `
-    <h2>Детайли</h2>
-    <div class="detail-grid">
-      <label>
-        Заглавие
-        <input id="editTitle" value="${escapeHtml(task.title)}" />
-      </label>
-      <label>
-        Описание
-        <textarea id="editDescription" rows="3">${escapeHtml(task.description)}</textarea>
-      </label>
-      <label>
-        Отговорник
-        <select id="editAssignee" ${manager ? "" : "disabled"}>
-          ${assigneeOptions}
-        </select>
-      </label>
-      <label>
-        Статус
-        <select id="editStatus">
-          ${STATUS.map(
-            (s) => `<option value="${s.key}" ${task.status === s.key ? "selected" : ""}>${s.label}</option>`
-          ).join("")}
-        </select>
-      </label>
-      <label>
-        Краен срок
-        <input id="editDueDate" type="date" value="${escapeHtml(task.dueDate || "")}" />
-      </label>
-      <button id="saveTaskBtn" type="button">Запази промени</button>
-    </div>
-    <h3>Кой е видял задачата</h3>
-    <div class="seen-list">
-      ${seenItems || `<p class="muted">Все още никой не е отварял задачата.</p>`}
-    </div>
-    <h3>История на промените</h3>
-    <div class="activity-list">
-      ${activityItems || `<p class="muted">Няма активност.</p>`}
-    </div>
-  `;
-
-  document.getElementById("saveTaskBtn").addEventListener("click", async () => {
-    await saveTaskChanges(task.id);
-  });
-}
-
-async function saveTaskChanges(taskId) {
-  const payload = {
-    title: document.getElementById("editTitle").value.trim(),
-    description: document.getElementById("editDescription").value.trim(),
-    assigneeId: document.getElementById("editAssignee").value,
-    status: document.getElementById("editStatus").value,
-    dueDate: document.getElementById("editDueDate").value,
-  };
-  try {
-    await api(`/api/tasks/${taskId}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    });
-    await loadTasks();
-  } catch (error) {
-    alert(error.message);
-  }
 }
 
 function formatDate(ts) {
@@ -804,3 +949,4 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 }
+

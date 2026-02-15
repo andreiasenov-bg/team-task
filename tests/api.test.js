@@ -143,6 +143,9 @@ async function main() {
     });
     assert.equal(ivanCantPatchOther.status, 404);
 
+    const ivanAudit = await ivan.request("GET", "/api/audit");
+    assert.equal(ivanAudit.status, 403);
+
     const petar = new Client();
     const petarLogin = await petar.request("POST", "/api/auth/login", {
       username: "petar",
@@ -168,6 +171,11 @@ async function main() {
 
     const markRead = await manager.request("POST", `/api/notifications/${doneNotif.id}/read`, {});
     assert.equal(markRead.status, 200);
+
+    const audit = await manager.request("GET", "/api/audit");
+    assert.equal(audit.status, 200);
+    assert.ok(Array.isArray(audit.json.audit));
+    assert.ok(audit.json.audit.length >= 1);
 
     const resetPwd = await manager.request("PATCH", `/api/users/${petarId}`, {
       password: "newpass1",

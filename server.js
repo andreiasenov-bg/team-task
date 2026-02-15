@@ -121,7 +121,7 @@ function createSeedData() {
     ],
   };
 
-  return { users, tasks: [task], notifications: [] };
+  return { users, tasks: [task], notifications: [], audit: [] };
 }
 
 function normalizeData(raw) {
@@ -134,7 +134,8 @@ function normalizeData(raw) {
   }));
   const tasks = Array.isArray(raw.tasks) ? raw.tasks : [];
   const notifications = Array.isArray(raw.notifications) ? raw.notifications : [];
-  return { users, tasks, notifications };
+  const audit = Array.isArray(raw.audit) ? raw.audit : [];
+  return { users, tasks, notifications, audit };
 }
 
 function hashPassword(password, salt) {
@@ -238,6 +239,23 @@ function publicUser(user) {
 function revokeUserSessions(userId) {
   for (const [token, s] of sessions.entries()) {
     if (s.userId === userId) sessions.delete(token);
+  }
+}
+
+function addAudit(data, actorUserId, action, detail, entityType, entityId) {
+  data.audit = data.audit || [];
+  data.audit.push({
+    id: crypto.randomUUID(),
+    at: now(),
+    actorUserId: actorUserId || null,
+    action,
+    detail: detail || "",
+    entityType: entityType || null,
+    entityId: entityId || null,
+  });
+  // Keep the audit log bounded to avoid unbounded growth.
+  if (data.audit.length > 5000) {
+    data.audit = data.audit.slice(data.audit.length - 5000);
   }
 }
 
@@ -495,6 +513,12 @@ async function handleRequest(req, res) {
   const parsedUrl = new URL(req.url, `http://${req.headers.host || "localhost"}`);
   const pathname = parsedUrl.pathname;
 
+  if (req.method === "GET" && pathname === "/favicon.ico") {
+    res.writeHead(204, { "Cache-Control": "no-store" });
+    res.end();
+    return;
+  }
+
   if (req.method === "POST" && pathname === "/api/auth/login") {
     try {
       const body = await parseBody(req);
@@ -508,6 +532,8 @@ async function handleRequest(req, res) {
       const token = crypto.randomBytes(24).toString("hex");
       sessions.set(token, { userId: user.id, expiresAt: now() + SESSION_TTL_MS });
       setSessionCookie(res, token);
+      addAudit(data, user.id, "login", "User logged in", "user", user.id);
+      writeData(data);
       sendJson(res, 200, { user: publicUser(user) });
       return;
     } catch {
@@ -518,7 +544,14 @@ async function handleRequest(req, res) {
 
   if (req.method === "POST" && pathname === "/api/auth/logout") {
     const cookies = parseCookies(req);
-    if (cookies.session) sessions.delete(cookies.session);
+    if (cookies.session) {
+      const session = sessions.get(cookies.session);
+      sessions.delete(cookies.session);
+      if (session && session.userId) {
+        addAudit(data, session.userId, "logout", "User logged out", "user", session.userId);
+        writeData(data);
+      }
+    }
     clearSessionCookie(res);
     sendJson(res, 200, { ok: true });
     return;
@@ -590,6 +623,7 @@ async function handleRequest(req, res) {
         createdAt: now(),
       };
       data.users.push(user);
+      addAudit(data, session.user.id, "user_create", `Created user @${username} (${role})`, "user", user.id);
       writeData(data);
       sendJson(res, 201, { user: publicUser(user) });
       return;
@@ -641,6 +675,7 @@ async function handleRequest(req, res) {
         const hashed = hashPassword(body.password);
         target.passwordHash = hashed.hash;
         target.passwordSalt = hashed.salt;
+        addAudit(data, session.user.id, "user_password_reset", `Reset password for @${target.username}`, "user", target.id);
       }
 
       if (typeof body.phone === "string") {
@@ -650,6 +685,14 @@ async function handleRequest(req, res) {
           return;
         }
         target.phone = phone;
+        addAudit(
+          data,
+          session.user.id,
+          "user_phone_update",
+          `Updated phone for @${target.username}`,
+          "user",
+          target.id
+        );
       }
 
       if (typeof body.active === "boolean") {
@@ -668,6 +711,14 @@ async function handleRequest(req, res) {
         if (body.active === false) {
           revokeUserSessions(target.id);
         }
+        addAudit(
+          data,
+          session.user.id,
+          "user_active_update",
+          `${body.active ? "Activated" : "Deactivated"} @${target.username}`,
+          "user",
+          target.id
+        );
       }
 
       writeData(data);
@@ -694,6 +745,8 @@ async function handleRequest(req, res) {
       return;
     }
     revokeUserSessions(target.id);
+    addAudit(data, session.user.id, "user_force_logout", `Force logout @${target.username}`, "user", target.id);
+    writeData(data);
     sendJson(res, 200, { ok: true });
     return;
   }
@@ -727,8 +780,37 @@ async function handleRequest(req, res) {
     target.deletedAt = now();
     target.active = false;
     revokeUserSessions(target.id);
+    addAudit(data, session.user.id, "user_soft_delete", `Soft deleted @${target.username}`, "user", target.id);
     writeData(data);
     sendJson(res, 200, { user: publicUser(target) });
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/audit") {
+    const session = requireAuth(req, res, data);
+    if (!session) return;
+    if (session.user.role !== "manager") {
+      sendJson(res, 403, { error: "Only manager can view audit log" });
+      return;
+    }
+    const limit = Math.max(1, Math.min(500, Number(parsedUrl.searchParams.get("limit") || 200)));
+    const entityType = parsedUrl.searchParams.get("entityType");
+    const entityId = parsedUrl.searchParams.get("entityId");
+    const actorUserId = parsedUrl.searchParams.get("actorUserId");
+    let items = (data.audit || []).slice();
+    if (entityType) items = items.filter((a) => a.entityType === entityType);
+    if (entityId) items = items.filter((a) => a.entityId === entityId);
+    if (actorUserId) items = items.filter((a) => a.actorUserId === actorUserId);
+    items.sort((a, b) => b.at - a.at);
+    items = items.slice(0, limit);
+    const enriched = items.map((a) => {
+      const actor = a.actorUserId ? data.users.find((u) => u.id === a.actorUserId) : null;
+      return {
+        ...a,
+        actor: actor ? publicUser(actor) : null,
+      };
+    });
+    sendJson(res, 200, { audit: enriched });
     return;
   }
 
@@ -806,6 +888,7 @@ async function handleRequest(req, res) {
       };
       addActivity(task, session.user.id, "Създадена задача", `Отговорник: ${assignee.displayName}`);
       data.tasks.unshift(task);
+      addAudit(data, session.user.id, "task_create", `Created task "${task.title}"`, "task", task.id);
       writeData(data);
       sendJson(res, 201, { task: enrichTask(task, data) });
       return;
@@ -828,6 +911,7 @@ async function handleRequest(req, res) {
     task.seenBy = task.seenBy || {};
     task.seenBy[session.user.id] = now();
     addActivity(task, session.user.id, "Преглед", "Отвори задачата");
+    addAudit(data, session.user.id, "task_view", `Viewed task "${task.title}"`, "task", task.id);
     writeData(data);
     sendJson(res, 200, { ok: true });
     return;
@@ -848,9 +932,18 @@ async function handleRequest(req, res) {
       if (session.user.role !== "manager") {
         body.assigneeId = session.user.id;
       }
+      const beforeStatus = task.status;
       const { statusChangedToDone } = applyTaskChanges(task, body, session.user, data);
       task.seenBy = task.seenBy || {};
       task.seenBy[session.user.id] = now();
+      addAudit(
+        data,
+        session.user.id,
+        "task_update",
+        `Updated task "${task.title}"`,
+        "task",
+        task.id
+      );
 
       if (statusChangedToDone) {
         data.notifications = data.notifications || [];
@@ -897,6 +990,14 @@ async function handleRequest(req, res) {
             }
           });
         }
+        addAudit(
+          data,
+          session.user.id,
+          "task_done",
+          `Marked done "${task.title}" (from ${beforeStatus})`,
+          "task",
+          task.id
+        );
       }
 
       writeData(data);
