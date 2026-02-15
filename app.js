@@ -50,6 +50,7 @@ const els = {
   searchInput: document.getElementById("searchInput"),
   statusFilter: document.getElementById("statusFilter"),
   dueFilter: document.getElementById("dueFilter"),
+  groupFilter: document.getElementById("groupFilter"),
   labelFilter: document.getElementById("labelFilter"),
   toggleViewBtn: document.getElementById("toggleViewBtn"),
   accessHint: document.getElementById("accessHint"),
@@ -95,6 +96,7 @@ const state = {
   status: "",
   due: "",
   label: "",
+  group: "",
   notifications: [],
   unread: 0,
   audit: [],
@@ -168,6 +170,10 @@ function bindEvents() {
   });
   els.dueFilter.addEventListener("change", () => {
     state.due = els.dueFilter.value;
+    renderShell();
+  });
+  els.groupFilter.addEventListener("change", () => {
+    state.group = els.groupFilter.value;
     renderShell();
   });
   els.labelFilter.addEventListener("change", () => {
@@ -486,6 +492,10 @@ function renderActivityRoute() {
     els.auditList.innerHTML = `<p class="muted">Нямаш достъп до Activity.</p>`;
     return;
   }
+  if (state._auditDirty) {
+    state._auditDirty = false;
+    loadAudit();
+  }
   renderAuditFilters();
   renderAudit();
 }
@@ -499,6 +509,11 @@ function renderNotificationsRoute() {
 function renderFilters() {
   const manager = isManager();
   if (!manager) state.filter = "all";
+
+  // Keep filter controls in sync with state.
+  els.searchInput.value = state.search;
+  els.statusFilter.value = state.status;
+  els.dueFilter.value = state.due;
 
   const filterOptions = [
     `<option value="all">Всички</option>`,
@@ -523,6 +538,20 @@ function renderFilters() {
   els.accessHint.textContent = manager
     ? "Мениджърски изглед: виждаш всички задачи."
     : "Служителски изглед: виждаш само твоите задачи.";
+
+  // Group filter options from current tasks.
+  const allGroups = new Set();
+  for (const t of state.tasks) allGroups.add(t.group || "General");
+  const groupOptions = [`<option value=\"\">Всички групи</option>`]
+    .concat(
+      Array.from(allGroups)
+        .sort()
+        .map((g) => `<option value=\"${escapeHtml(g)}\">${escapeHtml(g)}</option>`)
+    )
+    .join("");
+  els.groupFilter.innerHTML = groupOptions;
+  if (state.group && !allGroups.has(state.group)) state.group = "";
+  els.groupFilter.value = state.group || "";
 
   // Populate label filter from available tasks.
   const allLabels = new Set();
@@ -576,6 +605,7 @@ function filteredTasks() {
   const status = state.status;
   const due = state.due;
   const label = state.label;
+  const group = state.group;
   const today = new Date();
   const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
   const next7 = startOfToday + 7 * 24 * 60 * 60 * 1000;
@@ -588,6 +618,7 @@ function filteredTasks() {
       if (!hay.includes(q)) return false;
     }
     if (status && t.status !== status) return false;
+    if (group && (t.group || "General") !== group) return false;
     if (label) {
       const labels = t.labels || [];
       if (!labels.includes(label)) return false;
@@ -650,11 +681,21 @@ function renderBoard() {
 }
 
 function renderTable() {
-  const rows = filteredTasks();
+  const rows = filteredTasks().slice().sort((a, b) => {
+    const ga = (a.group || "General").localeCompare(b.group || "General");
+    if (ga !== 0) return ga;
+    const sa = a.status.localeCompare(b.status);
+    if (sa !== 0) return sa;
+    return (a.dueDate || "").localeCompare(b.dueDate || "");
+  });
   const activeUsers = state.users.filter((u) => u.active !== false && u.deleted !== true);
-  const userOptions = activeUsers
-    .map((u) => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.displayName)}</option>`)
-    .join("");
+
+  const groupMap = new Map();
+  for (const t of rows) {
+    const g = t.group || "General";
+    if (!groupMap.has(g)) groupMap.set(g, []);
+    groupMap.get(g).push(t);
+  }
 
   els.tasksTable.innerHTML = `
     <div class="table">
@@ -670,9 +711,23 @@ function renderTable() {
           </tr>
         </thead>
         <tbody>
-          ${rows
-            .map(
-              (t) => `
+          ${Array.from(groupMap.entries())
+            .map(([groupName, tasks]) => {
+              const collapsed = state._collapsedGroups && state._collapsedGroups.has(groupName);
+              const header = `
+                <tr class="group-row" data-group="${escapeHtml(groupName)}">
+                  <td colspan="6">
+                    <button class="group-toggle" type="button" data-action="toggle-group" data-group="${escapeHtml(
+                      groupName
+                    )}">${collapsed ? "+" : "-"} </button>
+                    ${escapeHtml(groupName)} <span class="muted">(${tasks.length})</span>
+                  </td>
+                </tr>
+              `;
+              if (collapsed) return header;
+              const body = tasks
+                .map(
+                  (t) => `
             <tr data-id="${t.id}">
               <td><input class="cell" data-field="title" value="${escapeHtml(t.title)}" /></td>
               <td>
@@ -699,25 +754,43 @@ function renderTable() {
               <td><input class="cell" data-field="labels" value="${escapeHtml((t.labels || []).join(", "))}" /></td>
             </tr>
           `
-            )
+                )
+                .join("");
+              return header + body;
+            })
             .join("")}
         </tbody>
       </table>
     </div>
   `;
 
-  els.tasksTable.querySelectorAll("tr[data-id]").forEach((tr) => {
-    tr.addEventListener("click", (e) => {
-      if (e.target && e.target.classList.contains("cell")) return;
-      state.selectedTaskId = tr.dataset.id;
-      renderDetails();
-    });
-  });
-
-  els.tasksTable.querySelectorAll(".cell").forEach((el) => {
-    el.addEventListener("change", () => inlineUpdateRow(el));
-    el.addEventListener("blur", () => inlineUpdateRow(el));
-  });
+  if (!state._collapsedGroups) state._collapsedGroups = new Set();
+  // Event delegation for table: one listener, no rebind storms.
+  els.tasksTable.onclick = (e) => {
+    const btn = e.target.closest("button[data-action]");
+    if (btn && btn.dataset.action === "toggle-group") {
+      const groupName = btn.dataset.group;
+      if (state._collapsedGroups.has(groupName)) state._collapsedGroups.delete(groupName);
+      else state._collapsedGroups.add(groupName);
+      renderTable();
+      return;
+    }
+    const tr = e.target.closest("tr[data-id]");
+    if (!tr) return;
+    if (e.target && e.target.classList.contains("cell")) return;
+    state.selectedTaskId = tr.dataset.id;
+    renderDetails();
+  };
+  els.tasksTable.onchange = (e) => {
+    const el = e.target;
+    if (!el.classList || !el.classList.contains("cell")) return;
+    inlineUpdateRow(el);
+  };
+  els.tasksTable.onblur = (e) => {
+    const el = e.target;
+    if (!el.classList || !el.classList.contains("cell")) return;
+    inlineUpdateRow(el);
+  };
 }
 
 const inlineTimers = new Map();
@@ -743,10 +816,18 @@ function inlineUpdateRow(el) {
         payload[field] = el.value;
       }
       try {
-        await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(payload) });
-        await loadTasks();
-        if (isManager()) await loadAudit();
-        renderShell();
+        const result = await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(payload) });
+        // Update local state without a full reload (keeps the table stable).
+        const idx = state.tasks.findIndex((t) => t.id === taskId);
+        if (idx !== -1) state.tasks[idx] = result.task;
+        if (state.selectedTaskId === taskId) renderDetails();
+        // Mark audit as dirty; refresh only when Activity is opened or manually refreshed.
+        state._auditDirty = true;
+        // If the edit makes the row no longer match filters, re-render the table/board.
+        if (state.route === "board") {
+          if (state.boardView === "kanban") renderBoard();
+          else renderTable();
+        }
       } catch (e) {
         alert(e.message);
       }

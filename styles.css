@@ -229,6 +229,19 @@ select {
   background: #fbfdff;
 }
 
+.group-row td {
+  background: #f3f7ff;
+  font-weight: 800;
+}
+
+.group-toggle {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 4px 8px;
+  border-radius: 10px;
+}
+
 .chip {
   display: inline-block;
   padding: 2px 8px;
@@ -260,6 +273,24 @@ button:hover {
 .inline {
   display: flex;
   gap: 6px;
+}
+
+.filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.filters input,
+.filters select {
+  min-width: 140px;
+}
+
+.filters #searchInput {
+  min-width: 220px;
+  flex: 1 1 240px;
 }
 
 .layout {
