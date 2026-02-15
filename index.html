@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="bg">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Task Team Board</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <div>
+          <p class="muted">Task Ops</p>
+          <h1>Team Board</h1>
+        </div>
+      </div>
+      <div class="controls">
+        <label>
+          Текущ потребител
+          <select id="currentUserSelect"></select>
+          <small id="currentRoleBadge" class="muted"></small>
+        </label>
+        <label>
+          Добави потребител
+          <div class="inline">
+            <input id="newUserInput" type="text" placeholder="име" />
+            <select id="newUserRole">
+              <option value="employee">Служител</option>
+              <option value="manager">Мениджър</option>
+            </select>
+            <button id="addUserBtn" type="button">Добави</button>
+          </div>
+        </label>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel form-panel">
+        <h2>Нова задача</h2>
+        <form id="taskForm">
+          <label>
+            Заглавие
+            <input id="taskTitle" type="text" required />
+          </label>
+          <label>
+            Описание
+            <textarea id="taskDescription" rows="3"></textarea>
+          </label>
+          <label>
+            Отговорник
+            <select id="taskAssignee"></select>
+          </label>
+          <label>
+            Краен срок
+            <input id="taskDueDate" type="date" />
+          </label>
+          <button type="submit">Създай</button>
+        </form>
+      </section>
+
+      <section class="panel board-panel">
+        <div class="board-header">
+          <h2>Задачи</h2>
+          <label>
+            Филтър по човек
+            <select id="assigneeFilter"></select>
+          </label>
+        </div>
+        <p id="accessHint" class="muted"></p>
+        <div id="board" class="board"></div>
+      </section>
+
+      <aside class="panel detail-panel" id="detailPanel">
+        <h2>Детайли</h2>
+        <p class="muted">Избери задача от борда.</p>
+      </aside>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
