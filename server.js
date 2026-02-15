@@ -96,6 +96,8 @@ function normalizeData(raw) {
   const users = (Array.isArray(raw.users) ? raw.users : []).map((user) => ({
     ...user,
     active: user.active !== false,
+    deleted: user.deleted === true,
+    deletedAt: user.deletedAt ? Number(user.deletedAt) : undefined,
   }));
   const tasks = Array.isArray(raw.tasks) ? raw.tasks : [];
   return { users, tasks };
@@ -181,7 +183,7 @@ function authenticate(req, data) {
     return null;
   }
   const user = data.users.find((u) => u.id === session.userId);
-  if (!user || user.active === false) return null;
+  if (!user || user.active === false || user.deleted === true) return null;
   session.expiresAt = now() + SESSION_TTL_MS;
   return { user, token };
 }
@@ -193,7 +195,15 @@ function publicUser(user) {
     displayName: user.displayName,
     role: user.role,
     active: user.active !== false,
+    deleted: user.deleted === true,
+    deletedAt: user.deletedAt || null,
   };
+}
+
+function revokeUserSessions(userId) {
+  for (const [token, s] of sessions.entries()) {
+    if (s.userId === userId) sessions.delete(token);
+  }
 }
 
 function canViewTask(task, user) {
@@ -229,7 +239,13 @@ function enrichTask(task, data) {
     title: task.title,
     description: task.description,
     assigneeId: task.assigneeId,
-    assigneeName: assignee ? assignee.displayName : "Няма",
+    assigneeName: assignee
+      ? assignee.deleted === true
+        ? `${assignee.displayName} (deleted)`
+        : assignee.active === false
+          ? `${assignee.displayName} (inactive)`
+          : assignee.displayName
+      : "Няма",
     dueDate: task.dueDate,
     status: task.status,
     createdAt: task.createdAt,
@@ -355,7 +371,7 @@ async function handleRequest(req, res) {
       const username = String(body.username || "").trim().toLowerCase();
       const password = String(body.password || "");
       const user = data.users.find((u) => u.username.toLowerCase() === username);
-      if (!user || user.active === false || !verifyPassword(password, user)) {
+      if (!user || user.active === false || user.deleted === true || !verifyPassword(password, user)) {
         sendJson(res, 401, { error: "Грешно потребителско име или парола" });
         return;
       }
@@ -432,6 +448,7 @@ async function handleRequest(req, res) {
         displayName,
         role,
         active: true,
+        deleted: false,
         passwordHash: hashed.hash,
         passwordSalt: hashed.salt,
         createdAt: now(),
@@ -475,6 +492,10 @@ async function handleRequest(req, res) {
         sendJson(res, 404, { error: "Потребителят не е намерен" });
         return;
       }
+      if (target.deleted === true) {
+        sendJson(res, 400, { error: "Потребителят е изтрит" });
+        return;
+      }
 
       if (typeof body.password === "string" && body.password.length > 0) {
         if (body.password.length < 6) {
@@ -500,9 +521,7 @@ async function handleRequest(req, res) {
         }
         target.active = body.active;
         if (body.active === false) {
-          for (const [token, s] of sessions.entries()) {
-            if (s.userId === target.id) sessions.delete(token);
-          }
+          revokeUserSessions(target.id);
         }
       }
 
@@ -513,6 +532,59 @@ async function handleRequest(req, res) {
       sendJson(res, 400, { error: "Невалидни данни" });
       return;
     }
+  }
+
+  const userLogoutMatch = pathname.match(/^\/api\/users\/([^/]+)\/logout$/);
+  if (req.method === "POST" && userLogoutMatch) {
+    const session = requireAuth(req, res, data);
+    if (!session) return;
+    if (session.user.role !== "manager") {
+      sendJson(res, 403, { error: "Only manager can force logout users" });
+      return;
+    }
+    const targetId = userLogoutMatch[1];
+    const target = data.users.find((u) => u.id === targetId);
+    if (!target || target.deleted === true) {
+      sendJson(res, 404, { error: "Потребителят не е намерен" });
+      return;
+    }
+    revokeUserSessions(target.id);
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  const userDeleteMatch = pathname.match(/^\/api\/users\/([^/]+)$/);
+  if (req.method === "DELETE" && userDeleteMatch) {
+    const session = requireAuth(req, res, data);
+    if (!session) return;
+    if (session.user.role !== "manager") {
+      sendJson(res, 403, { error: "Only manager can delete users" });
+      return;
+    }
+    const targetId = userDeleteMatch[1];
+    const target = data.users.find((u) => u.id === targetId);
+    if (!target || target.deleted === true) {
+      sendJson(res, 404, { error: "Потребителят не е намерен" });
+      return;
+    }
+    if (target.id === session.user.id) {
+      sendJson(res, 400, { error: "Не можеш да изтриеш себе си" });
+      return;
+    }
+    if (target.role === "manager") {
+      const activeManagers = data.users.filter((u) => u.role === "manager" && u.active !== false && u.deleted !== true);
+      if (activeManagers.length <= 1) {
+        sendJson(res, 400, { error: "Трябва да има поне един активен мениджър" });
+        return;
+      }
+    }
+    target.deleted = true;
+    target.deletedAt = now();
+    target.active = false;
+    revokeUserSessions(target.id);
+    writeData(data);
+    sendJson(res, 200, { user: publicUser(target) });
+    return;
   }
 
   if (req.method === "POST" && pathname === "/api/tasks") {

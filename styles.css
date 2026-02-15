@@ -208,6 +208,11 @@ button:hover {
   color: #8b1e1e;
 }
 
+.status-deleted {
+  background: #f0f0f0;
+  color: #444;
+}
+
 .board-panel {
   overflow: auto;
 }

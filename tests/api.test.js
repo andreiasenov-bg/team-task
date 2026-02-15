@@ -192,6 +192,17 @@ async function main() {
     });
     assert.equal(cannotAssignInactive.status, 400);
 
+    // Force logout should invalidate an active session.
+    const logoutIvan = await manager.request("POST", `/api/users/${ivanUser.id}/logout`, {});
+    assert.equal(logoutIvan.status, 200);
+    const ivanAfterLogout = await ivan.request("GET", "/api/tasks");
+    assert.equal(ivanAfterLogout.status, 401);
+
+    const softDelete = await manager.request("DELETE", `/api/users/${petarId}`);
+    assert.equal(softDelete.status, 200);
+    assert.equal(softDelete.json.user.deleted, true);
+    assert.equal(softDelete.json.user.active, false);
+
     const managerTasksAfter = await manager.request("GET", "/api/tasks");
     assert.equal(managerTasksAfter.status, 200);
     const unknownTasksRoute = await manager.request("GET", "/api/tasks/not-a-list");

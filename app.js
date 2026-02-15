@@ -271,20 +271,33 @@ function renderUserAdmin() {
   els.userAdminList.innerHTML = state.users
     .map((u) => {
       const isSelf = u.id === state.me.id;
-      const canToggle = !isSelf && !(u.role === "manager" && u.active !== false && activeManagers <= 1);
+      const isDeleted = u.deleted === true;
+      const canToggle =
+        !isSelf &&
+        !isDeleted &&
+        !(u.role === "manager" && u.active !== false && activeManagers <= 1);
+      const canDelete = !isSelf && !isDeleted && !(u.role === "manager" && u.active !== false && activeManagers <= 1);
+      const statusClass = isDeleted ? "status-deleted" : u.active === false ? "status-inactive" : "status-active";
       return `
       <div class="user-row">
         <h4>
           ${escapeHtml(u.displayName)} (@${escapeHtml(u.username)}) 
-          <span class="status-pill ${u.active === false ? "status-inactive" : "status-active"}">
-            ${u.active === false ? "inactive" : "active"}
+          <span class="status-pill ${statusClass}">
+            ${isDeleted ? "deleted" : u.active === false ? "inactive" : "active"}
           </span>
         </h4>
         <p class="muted">Роля: ${ROLE_LABELS[u.role]}</p>
         <div class="user-actions">
-          <input type="password" id="pwd-${u.id}" placeholder="нова парола (мин 6)" />
-          <button class="btn-secondary" type="button" data-action="reset-password" data-user-id="${u.id}">
+          <input type="password" id="pwd-${u.id}" placeholder="нова парола (мин 6)" ${isDeleted ? "disabled" : ""} />
+          <button class="btn-secondary" type="button" data-action="reset-password" data-user-id="${u.id}" ${
+            isDeleted ? "disabled" : ""
+          }>
             Смени парола
+          </button>
+          <button class="btn-secondary" type="button" data-action="force-logout" data-user-id="${u.id}" ${
+            isDeleted ? "disabled" : ""
+          }>
+            Force logout
           </button>
           <button
             class="btn-secondary"
@@ -294,6 +307,15 @@ function renderUserAdmin() {
             ${canToggle ? "" : "disabled"}
           >
             ${u.active === false ? "Активирай" : "Деактивирай"}
+          </button>
+          <button
+            class="btn-secondary"
+            type="button"
+            data-action="delete-user"
+            data-user-id="${u.id}"
+            ${canDelete ? "" : "disabled"}
+          >
+            Изтрий (soft)
           </button>
         </div>
       </div>
@@ -337,6 +359,28 @@ async function onUserAdminClick(event) {
         method: "PATCH",
         body: JSON.stringify({ active: nextActive }),
       });
+      await loadUsers();
+      await loadTasks();
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
+  if (action === "force-logout") {
+    if (!confirm(`Force logout на ${user.displayName}?`)) return;
+    try {
+      await api(`/api/users/${userId}/logout`, { method: "POST", body: "{}" });
+      alert("Сесиите са прекратени.");
+    } catch (error) {
+      alert(error.message);
+    }
+    return;
+  }
+
+  if (action === "delete-user") {
+    if (!confirm(`Сигурен ли си, че искаш да изтриеш (soft) ${user.displayName}?`)) return;
+    try {
+      await api(`/api/users/${userId}`, { method: "DELETE" });
       await loadUsers();
       await loadTasks();
     } catch (error) {
