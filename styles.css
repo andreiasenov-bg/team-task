@@ -293,6 +293,10 @@ button:hover {
   flex: 1 1 240px;
 }
 
+#resultsMeta {
+  margin: 8px 0 0;
+}
+
 .layout {
   display: grid;
   grid-template-columns: 320px 1fr 360px;

@@ -25,6 +25,7 @@ const els = {
   pageTitle: document.getElementById("pageTitle"),
   pageSubtitle: document.getElementById("pageSubtitle"),
   pageActions: document.getElementById("pageActions"),
+  healthBadge: document.getElementById("healthBadge"),
   navItems: Array.from(document.querySelectorAll(".nav-item[data-route]")),
 
   // Current user
@@ -52,8 +53,10 @@ const els = {
   dueFilter: document.getElementById("dueFilter"),
   groupFilter: document.getElementById("groupFilter"),
   labelFilter: document.getElementById("labelFilter"),
+  clearFiltersBtn: document.getElementById("clearFiltersBtn"),
   toggleViewBtn: document.getElementById("toggleViewBtn"),
   accessHint: document.getElementById("accessHint"),
+  resultsMeta: document.getElementById("resultsMeta"),
   board: document.getElementById("board"),
   boardWrap: document.getElementById("boardWrap"),
   tableWrap: document.getElementById("tableWrap"),
@@ -104,6 +107,7 @@ const state = {
     actorUserId: "",
     entityType: "",
   },
+  health: null,
 };
 
 let notifTimer = null;
@@ -178,6 +182,15 @@ function bindEvents() {
   });
   els.labelFilter.addEventListener("change", () => {
     state.label = els.labelFilter.value;
+    renderShell();
+  });
+  els.clearFiltersBtn.addEventListener("click", () => {
+    state.search = "";
+    state.status = "";
+    state.due = "";
+    state.group = "";
+    state.label = "";
+    if (isManager()) state.filter = "all";
     renderShell();
   });
   els.toggleViewBtn.addEventListener("click", () => {
@@ -281,6 +294,7 @@ async function restoreSession() {
 
 async function bootstrapApp() {
   showApp();
+  await loadHealth();
   await loadUsers();
   await loadTasks();
   await loadNotifications();
@@ -289,6 +303,15 @@ async function bootstrapApp() {
     await loadAudit();
   }
   renderShell();
+}
+
+async function loadHealth() {
+  try {
+    const h = await api("/api/health");
+    state.health = h;
+  } catch {
+    state.health = null;
+  }
 }
 
 async function onLogin(event) {
@@ -447,13 +470,22 @@ function renderShell() {
   }
   els.pageTitle.textContent = page.title;
   els.pageSubtitle.textContent = page.subtitle;
-  els.pageActions.innerHTML = "";
+  renderHealthBadge();
 
   // Route-specific rendering
   renderBoardRoute();
   renderPeopleRoute();
   renderActivityRoute();
   renderNotificationsRoute();
+}
+
+function renderHealthBadge() {
+  if (!els.healthBadge) return;
+  if (!state.health) {
+    els.healthBadge.textContent = "API: unknown";
+    return;
+  }
+  els.healthBadge.textContent = `API v${state.health.version} | data: ${state.health.counts.tasks} tasks`;
 }
 
 function renderBoardRoute() {
@@ -566,6 +598,7 @@ function renderFilters() {
     )
     .join("");
   els.labelFilter.innerHTML = labelOptions;
+  if (state.label && !allLabels.has(state.label)) state.label = "";
   els.labelFilter.value = state.label || "";
 }
 
@@ -641,6 +674,7 @@ function filteredTasks() {
 
 function renderBoard() {
   const tasksForBoard = filteredTasks();
+  renderResultsMeta(tasksForBoard.length, state.tasks.length);
   els.board.innerHTML = STATUS.map((s) => {
     const tasks = tasksForBoard.filter((t) => t.status === s.key);
     const cards = tasks
@@ -690,6 +724,7 @@ function renderTable() {
   });
   const activeUsers = state.users.filter((u) => u.active !== false && u.deleted !== true);
 
+  renderResultsMeta(rows.length, state.tasks.length);
   const groupMap = new Map();
   for (const t of rows) {
     const g = t.group || "General";
@@ -793,6 +828,19 @@ function renderTable() {
   };
 }
 
+function renderResultsMeta(shown, total) {
+  if (!els.resultsMeta) return;
+  const parts = [];
+  parts.push(`Показва: ${shown} / ${total}`);
+  const active = [];
+  if (state.search) active.push(`search="${state.search}"`);
+  if (state.status) active.push(`status=${state.status}`);
+  if (state.due) active.push(`due=${state.due}`);
+  if (state.group) active.push(`group=${state.group}`);
+  if (state.label) active.push(`label=${state.label}`);
+  if (isManager() && state.filter !== "all") active.push(`assignee=${state.filter}`);
+  els.resultsMeta.textContent = active.length ? `${parts.join(" ")} | ${active.join(", ")}` : parts.join(" ");
+}
 const inlineTimers = new Map();
 function inlineUpdateRow(el) {
   const tr = el.closest("tr[data-id]");

@@ -74,7 +74,9 @@
               <h2 id="pageTitle">Board</h2>
               <p id="pageSubtitle" class="muted"></p>
             </div>
-            <div class="page-actions" id="pageActions"></div>
+            <div class="page-actions" id="pageActions">
+              <small id="healthBadge" class="muted"></small>
+            </div>
           </header>
 
           <section id="view-board" class="view">
@@ -133,9 +135,11 @@
                     <select id="groupFilter" title="Група"></select>
                     <select id="labelFilter" title="Етикет"></select>
                     <select id="assigneeFilter" title="Отговорник"></select>
+                    <button id="clearFiltersBtn" type="button" class="btn-secondary">Clear</button>
                     <button id="toggleViewBtn" type="button" class="btn-secondary">Table</button>
                   </div>
                 </div>
+                <p id="resultsMeta" class="muted"></p>
                 <div id="boardWrap">
                   <div id="board" class="board"></div>
                 </div>

@@ -10,6 +10,7 @@ const DATA_FILE = process.env.DATA_FILE
   ? path.resolve(process.env.DATA_FILE)
   : path.join(__dirname, "data.json");
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
+const SCHEMA_VERSION = 3;
 
 const STATUS = new Set(["todo", "inprogress", "done"]);
 
@@ -19,6 +20,16 @@ loadDotEnv();
 
 function now() {
   return Date.now();
+}
+
+function readPackageVersion() {
+  try {
+    const raw = fs.readFileSync(path.join(__dirname, "package.json"), "utf8");
+    const pkg = JSON.parse(raw);
+    return String(pkg.version || "0.0.0");
+  } catch {
+    return "0.0.0";
+  }
 }
 
 function loadDotEnv() {
@@ -50,7 +61,9 @@ function loadDotEnv() {
 function readData() {
   try {
     const raw = fs.readFileSync(DATA_FILE, "utf8");
-    return normalizeData(JSON.parse(raw));
+    const { data, changed } = normalizeData(JSON.parse(raw));
+    if (changed) writeData(data);
+    return data;
   } catch {
     const seed = createSeedData();
     writeData(seed);
@@ -59,7 +72,13 @@ function readData() {
 }
 
 function writeData(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
+  try {
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf8");
+  } catch (e) {
+    // Hard fail so the API doesn't "look like it worked" without persisting.
+    const msg = e && e.message ? e.message : String(e);
+    throw new Error(`Failed to write data file: ${msg}`);
+  }
 }
 
 function createSeedData() {
@@ -123,10 +142,11 @@ function createSeedData() {
     ],
   };
 
-  return { users, tasks: [task], notifications: [], audit: [] };
+  return { schemaVersion: SCHEMA_VERSION, users, tasks: [task], notifications: [], audit: [] };
 }
 
 function normalizeData(raw) {
+  let changed = false;
   const users = (Array.isArray(raw.users) ? raw.users : []).map((user) => ({
     ...user,
     active: user.active !== false,
@@ -143,7 +163,32 @@ function normalizeData(raw) {
   }));
   const notifications = Array.isArray(raw.notifications) ? raw.notifications : [];
   const audit = Array.isArray(raw.audit) ? raw.audit : [];
-  return { users, tasks, notifications, audit };
+
+  const schemaVersion = Number(raw.schemaVersion || 0);
+  const data = {
+    schemaVersion: SCHEMA_VERSION,
+    users,
+    tasks,
+    notifications,
+    audit,
+  };
+  if (schemaVersion !== SCHEMA_VERSION) changed = true;
+  if (!("schemaVersion" in raw)) changed = true;
+  if (!Array.isArray(raw.notifications)) changed = true;
+  if (!Array.isArray(raw.audit)) changed = true;
+
+  // Ensure tasks and users have required fields (migration safety).
+  for (const u of data.users) {
+    if (typeof u.active !== "boolean") changed = true;
+    if (typeof u.deleted !== "boolean") changed = true;
+    if (typeof u.phone !== "string") changed = true;
+  }
+  for (const t of data.tasks) {
+    if (!t.group) changed = true;
+    if (!Array.isArray(t.labels)) changed = true;
+  }
+
+  return { data, changed };
 }
 
 function hashPassword(password, salt) {
@@ -546,6 +591,24 @@ async function handleRequest(req, res) {
   if (req.method === "GET" && pathname === "/favicon.ico") {
     res.writeHead(204, { "Cache-Control": "no-store" });
     res.end();
+    return;
+  }
+
+  if (req.method === "GET" && pathname === "/api/health") {
+    const version = readPackageVersion();
+    sendJson(res, 200, {
+      ok: true,
+      version,
+      schemaVersion: SCHEMA_VERSION,
+      dataFile: DATA_FILE,
+      counts: {
+        users: (data.users || []).length,
+        tasks: (data.tasks || []).length,
+        notifications: (data.notifications || []).length,
+        audit: (data.audit || []).length,
+      },
+      serverTime: now(),
+    });
     return;
   }
 
@@ -1049,7 +1112,8 @@ async function handleRequest(req, res) {
 }
 
 const server = http.createServer((req, res) => {
-  handleRequest(req, res).catch(() => {
+  handleRequest(req, res).catch((e) => {
+    console.error("[SERVER_ERROR]", e && e.stack ? e.stack : e);
     sendJson(res, 500, { error: "Internal server error" });
   });
 });
