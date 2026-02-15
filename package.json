@@ -1,0 +1,11 @@
+{
+  "name": "team-task-board",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Role-based task board with auth and activity logs",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node tests/api.test.js"
+  }
+}

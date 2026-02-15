@@ -13,35 +13,65 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <header class="topbar">
-      <div class="brand">
-        <span class="brand-dot"></span>
-        <div>
-          <p class="muted">Task Ops</p>
-          <h1>Team Board</h1>
-        </div>
-      </div>
-      <div class="controls">
-        <label>
-          Текущ потребител
-          <select id="currentUserSelect"></select>
-          <small id="currentRoleBadge" class="muted"></small>
-        </label>
-        <label>
-          Добави потребител
-          <div class="inline">
-            <input id="newUserInput" type="text" placeholder="име" />
-            <select id="newUserRole">
-              <option value="employee">Служител</option>
-              <option value="manager">Мениджър</option>
-            </select>
-            <button id="addUserBtn" type="button">Добави</button>
+    <main id="authView" class="auth-wrap">
+      <section class="panel auth-panel">
+        <div class="brand">
+          <span class="brand-dot"></span>
+          <div>
+            <p class="muted">Task Ops</p>
+            <h1>Team Board</h1>
           </div>
-        </label>
-      </div>
-    </header>
+        </div>
+        <h2>Вход</h2>
+        <form id="loginForm" class="auth-form">
+          <label>
+            Username
+            <input id="loginUsername" type="text" required />
+          </label>
+          <label>
+            Парола
+            <input id="loginPassword" type="password" required />
+          </label>
+          <button type="submit">Влез</button>
+          <p id="authError" class="error"></p>
+        </form>
+        <p class="muted">Demo: manager / admin123</p>
+      </section>
+    </main>
 
-    <main class="layout">
+    <div id="appView" class="hidden">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-dot"></span>
+          <div>
+            <p class="muted">Task Ops</p>
+            <h1>Team Board</h1>
+          </div>
+        </div>
+        <div class="controls">
+          <label>
+            Текущ потребител
+            <input id="currentUserInfo" type="text" disabled />
+            <small id="currentRoleBadge" class="muted"></small>
+          </label>
+          <label>
+            Добави потребител
+            <div class="inline">
+              <input id="newUserUsername" type="text" placeholder="username" />
+              <input id="newUserInput" type="text" placeholder="име" />
+              <input id="newUserPassword" type="password" placeholder="парола" />
+              <select id="newUserRole">
+                <option value="employee">Служител</option>
+                <option value="manager">Мениджър</option>
+              </select>
+              <button id="addUserBtn" type="button">Добави</button>
+            </div>
+          </label>
+          <button id="logoutBtn" type="button">Изход</button>
+        </div>
+      </header>
+
+      <main class="layout">
       <section class="panel form-panel">
         <h2>Нова задача</h2>
         <form id="taskForm">
@@ -63,6 +93,11 @@
           </label>
           <button type="submit">Създай</button>
         </form>
+        <div id="userAdminPanel" class="user-admin">
+          <h3>Потребители</h3>
+          <p class="muted">Смяна на парола и активиране/деактивиране (само мениджър).</p>
+          <div id="userAdminList"></div>
+        </div>
       </section>
 
       <section class="panel board-panel">
@@ -81,7 +116,8 @@
         <h2>Детайли</h2>
         <p class="muted">Избери задача от борда.</p>
       </aside>
-    </main>
+      </main>
+    </div>
 
     <script src="./app.js"></script>
   </body>

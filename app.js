@@ -1,13 +1,6 @@
-const STORAGE_KEY = "task-team-board-v1";
-
-const ROLES = {
-  manager: "manager",
-  employee: "employee",
-};
-
 const ROLE_LABELS = {
-  [ROLES.manager]: "Мениджър",
-  [ROLES.employee]: "Служител",
+  manager: "Мениджър",
+  employee: "Служител",
 };
 
 const STATUS = [
@@ -17,11 +10,22 @@ const STATUS = [
 ];
 
 const els = {
-  currentUserSelect: document.getElementById("currentUserSelect"),
+  authView: document.getElementById("authView"),
+  appView: document.getElementById("appView"),
+  loginForm: document.getElementById("loginForm"),
+  loginUsername: document.getElementById("loginUsername"),
+  loginPassword: document.getElementById("loginPassword"),
+  authError: document.getElementById("authError"),
+  currentUserInfo: document.getElementById("currentUserInfo"),
   currentRoleBadge: document.getElementById("currentRoleBadge"),
+  newUserUsername: document.getElementById("newUserUsername"),
   newUserInput: document.getElementById("newUserInput"),
+  newUserPassword: document.getElementById("newUserPassword"),
   newUserRole: document.getElementById("newUserRole"),
   addUserBtn: document.getElementById("addUserBtn"),
+  logoutBtn: document.getElementById("logoutBtn"),
+  userAdminPanel: document.getElementById("userAdminPanel"),
+  userAdminList: document.getElementById("userAdminList"),
   taskForm: document.getElementById("taskForm"),
   taskTitle: document.getElementById("taskTitle"),
   taskDescription: document.getElementById("taskDescription"),
@@ -33,290 +37,327 @@ const els = {
   detailPanel: document.getElementById("detailPanel"),
 };
 
-const initialData = {
-  users: [
-    { name: "Мениджър", role: ROLES.manager },
-    { name: "Иван", role: ROLES.employee },
-    { name: "Мария", role: ROLES.employee },
-  ],
-  currentUser: "Мениджър",
-  filter: "all",
+const state = {
+  me: null,
+  users: [],
+  tasks: [],
   selectedTaskId: null,
-  tasks: [
-    {
-      id: crypto.randomUUID(),
-      title: "Седмичен отчет",
-      description: "Събери KPI и изпрати PDF до 17:00.",
-      assignee: "Иван",
-      dueDate: "",
-      status: "todo",
-      createdAt: Date.now(),
-      createdBy: "Мениджър",
-      seenBy: {},
-      activity: [],
-    },
-  ],
+  filter: "all",
 };
 
-let state = loadState();
-seedInitialActivity();
-renderAll();
-bindEvents();
+init();
 
-function loadState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return structuredClone(initialData);
-  try {
-    return normalizeState(JSON.parse(raw));
-  } catch {
-    return structuredClone(initialData);
-  }
-}
-
-function normalizeState(rawState) {
-  const next = rawState && typeof rawState === "object" ? rawState : {};
-
-  let users = Array.isArray(next.users) ? next.users : [];
-  users = users
-    .map((u, i) => {
-      if (typeof u === "string") {
-        return {
-          name: u,
-          role: i === 0 ? ROLES.manager : ROLES.employee,
-        };
-      }
-      if (!u || typeof u.name !== "string") return null;
-      return {
-        name: u.name.trim(),
-        role: u.role === ROLES.manager ? ROLES.manager : ROLES.employee,
-      };
-    })
-    .filter(Boolean);
-
-  if (!users.length) users = structuredClone(initialData.users);
-  if (!users.some((u) => u.role === ROLES.manager)) users[0].role = ROLES.manager;
-
-  const tasks = Array.isArray(next.tasks) ? next.tasks : [];
-  const normalizedTasks = tasks.map((task) => ({
-    id: task.id || crypto.randomUUID(),
-    title: task.title || "Без заглавие",
-    description: task.description || "",
-    assignee: task.assignee || "",
-    dueDate: task.dueDate || "",
-    status: STATUS.some((s) => s.key === task.status) ? task.status : "todo",
-    createdAt: Number(task.createdAt) || Date.now(),
-    createdBy: task.createdBy || "Система",
-    seenBy: task.seenBy && typeof task.seenBy === "object" ? task.seenBy : {},
-    activity: Array.isArray(task.activity) ? task.activity : [],
-  }));
-
-  const currentUser = users.some((u) => u.name === next.currentUser)
-    ? next.currentUser
-    : users[0].name;
-
-  return {
-    users,
-    currentUser,
-    filter: typeof next.filter === "string" ? next.filter : "all",
-    selectedTaskId: typeof next.selectedTaskId === "string" ? next.selectedTaskId : null,
-    tasks: normalizedTasks,
-  };
-}
-
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-function seedInitialActivity() {
-  state.tasks.forEach((task) => {
-    if (!task.activity.length) {
-      task.activity.push({
-        at: task.createdAt,
-        by: task.createdBy,
-        action: "Създадена задача",
-        detail: "Начален запис",
-      });
-    }
-  });
-  saveState();
+async function init() {
+  bindEvents();
+  await restoreSession();
 }
 
 function bindEvents() {
-  els.addUserBtn.addEventListener("click", addUser);
-  els.taskForm.addEventListener("submit", createTask);
-  els.currentUserSelect.addEventListener("change", () => {
-    state.currentUser = els.currentUserSelect.value;
-    if (state.selectedTaskId && !canViewTask(getTaskById(state.selectedTaskId))) {
-      state.selectedTaskId = null;
-    } else if (state.selectedTaskId) {
-      markSeen(state.selectedTaskId);
-    }
-    saveState();
-    renderAll();
-  });
-  els.assigneeFilter.addEventListener("change", () => {
+  els.loginForm.addEventListener("submit", onLogin);
+  els.logoutBtn.addEventListener("click", onLogout);
+  els.addUserBtn.addEventListener("click", onAddUser);
+  els.taskForm.addEventListener("submit", onCreateTask);
+  els.assigneeFilter.addEventListener("change", async () => {
     state.filter = els.assigneeFilter.value;
-    saveState();
-    renderBoard();
+    await loadTasks();
   });
+  els.userAdminList.addEventListener("click", onUserAdminClick);
 }
 
-function getTaskById(taskId) {
-  return state.tasks.find((t) => t.id === taskId);
+async function api(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    ...options,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.error || "Request failed");
+  }
+  return data;
 }
 
-function getUser(name) {
-  return state.users.find((u) => u.name === name);
+async function restoreSession() {
+  try {
+    const result = await api("/api/auth/me");
+    if (!result.user) {
+      showAuth();
+      return;
+    }
+    state.me = result.user;
+    await bootstrapApp();
+  } catch {
+    showAuth();
+  }
 }
 
-function getCurrentUser() {
-  return getUser(state.currentUser);
+function showAuth() {
+  state.me = null;
+  els.authView.classList.remove("hidden");
+  els.appView.classList.add("hidden");
 }
 
-function isCurrentUserManager() {
-  const user = getCurrentUser();
-  return user && user.role === ROLES.manager;
+function showApp() {
+  els.authView.classList.add("hidden");
+  els.appView.classList.remove("hidden");
 }
 
-function canViewTask(task) {
-  if (!task) return false;
-  if (isCurrentUserManager()) return true;
-  return task.assignee === state.currentUser;
+function isManager() {
+  return state.me && state.me.role === "manager";
 }
 
-function canEditTask(task) {
-  return canViewTask(task);
+async function bootstrapApp() {
+  showApp();
+  await loadUsers();
+  await loadTasks();
+  renderAll();
 }
 
-function addUser() {
-  if (!isCurrentUserManager()) return;
-  const name = els.newUserInput.value.trim();
-  const role = els.newUserRole.value === ROLES.manager ? ROLES.manager : ROLES.employee;
-  if (!name) return;
-  if (state.users.some((u) => u.name.toLowerCase() === name.toLowerCase())) {
-    els.newUserInput.value = "";
+async function onLogin(event) {
+  event.preventDefault();
+  els.authError.textContent = "";
+  try {
+    const result = await api("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({
+        username: els.loginUsername.value.trim(),
+        password: els.loginPassword.value,
+      }),
+    });
+    state.me = result.user;
+    els.loginForm.reset();
+    await bootstrapApp();
+  } catch (error) {
+    els.authError.textContent = error.message;
+  }
+}
+
+async function onLogout() {
+  try {
+    await api("/api/auth/logout", { method: "POST", body: "{}" });
+  } finally {
+    state.users = [];
+    state.tasks = [];
+    state.selectedTaskId = null;
+    showAuth();
+  }
+}
+
+async function loadUsers() {
+  const result = await api("/api/users");
+  state.users = result.users;
+}
+
+async function loadTasks() {
+  const query =
+    isManager() && state.filter !== "all"
+      ? `?assigneeId=${encodeURIComponent(state.filter)}`
+      : "";
+  const result = await api(`/api/tasks${query}`);
+  state.tasks = result.tasks;
+  if (!state.tasks.some((t) => t.id === state.selectedTaskId)) {
+    state.selectedTaskId = null;
+  }
+  renderAll();
+}
+
+async function onAddUser() {
+  if (!isManager()) return;
+  const username = els.newUserUsername.value.trim().toLowerCase();
+  const displayName = els.newUserInput.value.trim();
+  const password = els.newUserPassword.value;
+  if (!username || !displayName || password.length < 6) {
+    alert("Попълни username, име и парола (мин. 6 символа).");
     return;
   }
-  state.users.push({ name, role });
-  state.currentUser = name;
-  els.newUserInput.value = "";
-  saveState();
-  renderAll();
+  try {
+    await api("/api/users", {
+      method: "POST",
+      body: JSON.stringify({
+        username,
+        displayName,
+        password,
+        role: els.newUserRole.value,
+      }),
+    });
+    els.newUserUsername.value = "";
+    els.newUserInput.value = "";
+    els.newUserPassword.value = "";
+    await loadUsers();
+    renderAll();
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
-function createTask(e) {
-  e.preventDefault();
+async function onCreateTask(event) {
+  event.preventDefault();
   const title = els.taskTitle.value.trim();
   if (!title) return;
-
-  const manager = isCurrentUserManager();
-  const assignee = manager ? els.taskAssignee.value || state.currentUser : state.currentUser;
-  const task = {
-    id: crypto.randomUUID(),
-    title,
-    description: els.taskDescription.value.trim(),
-    assignee,
-    dueDate: els.taskDueDate.value || "",
-    status: "todo",
-    createdAt: Date.now(),
-    createdBy: state.currentUser,
-    seenBy: {},
-    activity: [],
-  };
-  task.activity.push({
-    at: Date.now(),
-    by: state.currentUser,
-    action: "Създадена задача",
-    detail: `Отговорник: ${task.assignee || "няма"}`,
-  });
-  state.tasks.unshift(task);
-  state.selectedTaskId = task.id;
-  saveState();
-  els.taskForm.reset();
-  renderAll();
-}
-
-function getVisibleTasks() {
-  if (isCurrentUserManager()) {
-    return state.filter === "all"
-      ? state.tasks
-      : state.tasks.filter((t) => t.assignee === state.filter);
+  const assigneeId = isManager()
+    ? els.taskAssignee.value || state.me.id
+    : state.me.id;
+  try {
+    const result = await api("/api/tasks", {
+      method: "POST",
+      body: JSON.stringify({
+        title,
+        description: els.taskDescription.value.trim(),
+        dueDate: els.taskDueDate.value || "",
+        assigneeId,
+      }),
+    });
+    els.taskForm.reset();
+    state.selectedTaskId = result.task.id;
+    await loadTasks();
+  } catch (error) {
+    alert(error.message);
   }
-  return state.tasks.filter((t) => t.assignee === state.currentUser);
 }
 
 function renderAll() {
-  renderUserSelects();
+  if (!state.me) return;
+  renderHeader();
+  renderFilters();
+  renderUserAdmin();
   renderBoard();
   renderDetails();
 }
 
-function renderUserSelects() {
-  const userOptions = state.users
-    .map(
-      (user) =>
-        `<option value="${escapeHtml(user.name)}">${escapeHtml(user.name)} (${ROLE_LABELS[
-          user.role
-        ]})</option>`
-    )
-    .join("");
-
-  els.currentUserSelect.innerHTML = userOptions;
-  els.currentUserSelect.value = state.currentUser;
-
-  const manager = isCurrentUserManager();
-  els.currentRoleBadge.textContent = `Роля: ${
-    manager ? ROLE_LABELS[ROLES.manager] : ROLE_LABELS[ROLES.employee]
-  }`;
-
-  const assigneeUsers = manager ? state.users : state.users.filter((u) => u.name === state.currentUser);
-  const assigneeOptions = assigneeUsers
-    .map((u) => `<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)}</option>`)
-    .join("");
-  els.taskAssignee.innerHTML = assigneeOptions;
+function renderHeader() {
+  els.currentUserInfo.value = `${state.me.displayName} (@${state.me.username})`;
+  els.currentRoleBadge.textContent = `Роля: ${ROLE_LABELS[state.me.role]}`;
+  const manager = isManager();
+  els.newUserUsername.disabled = !manager;
+  els.newUserInput.disabled = !manager;
+  els.newUserPassword.disabled = !manager;
+  els.newUserRole.disabled = !manager;
+  els.addUserBtn.disabled = !manager;
   els.taskAssignee.disabled = !manager;
+  els.userAdminPanel.classList.toggle("hidden", !manager);
+}
+
+function renderFilters() {
+  const manager = isManager();
+  if (!manager) state.filter = "all";
 
   const filterOptions = [
     `<option value="all">Всички</option>`,
-    ...state.users.map((u) => `<option value="${escapeHtml(u.name)}">${escapeHtml(u.name)}</option>`),
+    ...state.users.map(
+      (u) =>
+        `<option value="${escapeHtml(u.id)}">${escapeHtml(
+          u.active === false ? `${u.displayName} (inactive)` : u.displayName
+        )}</option>`
+    ),
   ].join("");
   els.assigneeFilter.innerHTML = filterOptions;
+  els.assigneeFilter.value = manager ? state.filter : "all";
+  els.assigneeFilter.disabled = !manager;
 
-  if (manager) {
-    if (!state.filter) state.filter = "all";
-    els.assigneeFilter.value = state.filter;
-    els.assigneeFilter.disabled = false;
-    els.accessHint.textContent = "Мениджърски изглед: виждаш всички задачи в дашборда.";
-    els.newUserInput.disabled = false;
-    els.newUserRole.disabled = false;
-    els.addUserBtn.disabled = false;
-  } else {
-    state.filter = "all";
-    els.assigneeFilter.value = "all";
-    els.assigneeFilter.disabled = true;
-    els.accessHint.textContent =
-      "Служителски изглед: виждаш само твоите задачи. Нямаш достъп до задачите на други хора.";
-    els.newUserInput.disabled = true;
-    els.newUserRole.disabled = true;
-    els.addUserBtn.disabled = true;
+  const activeUsers = state.users.filter((u) => u.active !== false);
+  const assigneeUsers = manager ? activeUsers : activeUsers.filter((u) => u.id === state.me.id);
+  els.taskAssignee.innerHTML = assigneeUsers
+    .map((u) => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.displayName)}</option>`)
+    .join("");
+
+  els.accessHint.textContent = manager
+    ? "Мениджърски изглед: виждаш всички задачи."
+    : "Служителски изглед: виждаш само твоите задачи.";
+}
+
+function renderUserAdmin() {
+  if (!isManager()) return;
+  const activeManagers = state.users.filter((u) => u.role === "manager" && u.active !== false).length;
+  els.userAdminList.innerHTML = state.users
+    .map((u) => {
+      const isSelf = u.id === state.me.id;
+      const canToggle = !isSelf && !(u.role === "manager" && u.active !== false && activeManagers <= 1);
+      return `
+      <div class="user-row">
+        <h4>
+          ${escapeHtml(u.displayName)} (@${escapeHtml(u.username)}) 
+          <span class="status-pill ${u.active === false ? "status-inactive" : "status-active"}">
+            ${u.active === false ? "inactive" : "active"}
+          </span>
+        </h4>
+        <p class="muted">Роля: ${ROLE_LABELS[u.role]}</p>
+        <div class="user-actions">
+          <input type="password" id="pwd-${u.id}" placeholder="нова парола (мин 6)" />
+          <button class="btn-secondary" type="button" data-action="reset-password" data-user-id="${u.id}">
+            Смени парола
+          </button>
+          <button
+            class="btn-secondary"
+            type="button"
+            data-action="toggle-active"
+            data-user-id="${u.id}"
+            ${canToggle ? "" : "disabled"}
+          >
+            ${u.active === false ? "Активирай" : "Деактивирай"}
+          </button>
+        </div>
+      </div>
+    `;
+    })
+    .join("");
+}
+
+async function onUserAdminClick(event) {
+  const btn = event.target.closest("button[data-action]");
+  if (!btn || !isManager()) return;
+  const userId = btn.dataset.userId;
+  const action = btn.dataset.action;
+  const user = state.users.find((u) => u.id === userId);
+  if (!user) return;
+
+  if (action === "reset-password") {
+    const input = document.getElementById(`pwd-${userId}`);
+    const password = input ? input.value : "";
+    if (!password || password.length < 6) {
+      alert("Въведи нова парола с минимум 6 символа.");
+      return;
+    }
+    try {
+      await api(`/api/users/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ password }),
+      });
+      if (input) input.value = "";
+      alert(`Паролата на ${user.displayName} е сменена.`);
+    } catch (error) {
+      alert(error.message);
+    }
+    return;
+  }
+
+  if (action === "toggle-active") {
+    const nextActive = user.active === false;
+    try {
+      await api(`/api/users/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ active: nextActive }),
+      });
+      await loadUsers();
+      await loadTasks();
+    } catch (error) {
+      alert(error.message);
+    }
   }
 }
 
 function renderBoard() {
-  const visibleTasks = getVisibleTasks();
-
   els.board.innerHTML = STATUS.map((s) => {
-    const tasks = visibleTasks.filter((t) => t.status === s.key);
+    const tasks = state.tasks.filter((t) => t.status === s.key);
     const cards = tasks
       .map(
         (t) => `
-        <article class="card" data-id="${t.id}">
-          <h4>${escapeHtml(t.title)}</h4>
-          <p><strong>Отговорник:</strong> ${escapeHtml(t.assignee || "-")}</p>
-          <p><strong>Краен срок:</strong> ${escapeHtml(t.dueDate || "-")}</p>
-          <p><strong>Видяно от:</strong> ${Object.keys(t.seenBy).length} души</p>
-        </article>
-      `
+      <article class="card" data-id="${t.id}">
+        <h4>${escapeHtml(t.title)}</h4>
+        <p><strong>Отговорник:</strong> ${escapeHtml(t.assigneeName || "-")}</p>
+        <p><strong>Краен срок:</strong> ${escapeHtml(t.dueDate || "-")}</p>
+        <p><strong>Видяно от:</strong> ${t.seenBy.length} души</p>
+      </article>
+    `
       )
       .join("");
     return `
@@ -328,20 +369,19 @@ function renderBoard() {
   }).join("");
 
   els.board.querySelectorAll(".card").forEach((card) => {
-    card.addEventListener("click", () => {
-      const task = getTaskById(card.dataset.id);
-      if (!canViewTask(task)) return;
+    card.addEventListener("click", async () => {
       state.selectedTaskId = card.dataset.id;
-      markSeen(card.dataset.id);
-      renderDetails();
-      saveState();
+      try {
+        await api(`/api/tasks/${card.dataset.id}/seen`, { method: "POST", body: "{}" });
+      } catch {}
+      await loadTasks();
     });
   });
 }
 
 function renderDetails() {
-  const task = getTaskById(state.selectedTaskId);
-  if (!task || !canViewTask(task)) {
+  const task = state.tasks.find((t) => t.id === state.selectedTaskId);
+  if (!task) {
     els.detailPanel.innerHTML = `
       <h2>Детайли</h2>
       <p class="muted">Избери задача от борда.</p>
@@ -349,35 +389,30 @@ function renderDetails() {
     return;
   }
 
-  const manager = isCurrentUserManager();
-  const canEdit = canEditTask(task);
-  const seenItems = Object.entries(task.seenBy)
-    .sort((a, b) => b[1] - a[1])
-    .map(
-      ([user, ts]) => `
-      <p class="seen-item"><strong>${escapeHtml(user)}</strong> - ${formatDate(ts)}</p>
-    `
-    )
+  const manager = isManager();
+  const seenItems = task.seenBy
+    .slice()
+    .sort((a, b) => b.at - a.at)
+    .map((item) => `<p class="seen-item"><strong>${escapeHtml(item.displayName)}</strong> - ${formatDate(item.at)}</p>`)
     .join("");
 
   const activityItems = task.activity
     .slice()
     .sort((a, b) => b.at - a.at)
     .map(
-      (a) => `
-      <p class="activity-item"><strong>${escapeHtml(a.by)}</strong> - ${escapeHtml(
+      (a) => `<p class="activity-item"><strong>${escapeHtml(a.byUser.displayName)}</strong> - ${escapeHtml(
         a.action
-      )}<br>${escapeHtml(a.detail)}<br><span class="muted">${formatDate(a.at)}</span></p>
-    `
+      )}<br>${escapeHtml(a.detail)}<br><span class="muted">${formatDate(a.at)}</span></p>`
     )
     .join("");
 
-  const assigneeOptions = (manager ? state.users : state.users.filter((u) => u.name === state.currentUser))
+  const assigneeOptions = (manager ? state.users : state.users.filter((u) => u.id === state.me.id))
+    .filter((u) => u.active !== false || u.id === task.assigneeId)
     .map(
       (u) =>
-        `<option value="${escapeHtml(u.name)}" ${
-          u.name === task.assignee ? "selected" : ""
-        }>${escapeHtml(u.name)}</option>`
+        `<option value="${escapeHtml(u.id)}" ${u.id === task.assigneeId ? "selected" : ""}>${escapeHtml(
+          u.active === false ? `${u.displayName} (inactive)` : u.displayName
+        )}</option>`
     )
     .join("");
 
@@ -386,105 +421,64 @@ function renderDetails() {
     <div class="detail-grid">
       <label>
         Заглавие
-        <input id="editTitle" value="${escapeHtml(task.title)}" ${canEdit ? "" : "disabled"} />
+        <input id="editTitle" value="${escapeHtml(task.title)}" />
       </label>
       <label>
         Описание
-        <textarea id="editDescription" rows="3" ${canEdit ? "" : "disabled"}>${escapeHtml(
-    task.description
-  )}</textarea>
+        <textarea id="editDescription" rows="3">${escapeHtml(task.description)}</textarea>
       </label>
       <label>
         Отговорник
-        <select id="editAssignee" ${manager && canEdit ? "" : "disabled"}>
+        <select id="editAssignee" ${manager ? "" : "disabled"}>
           ${assigneeOptions}
         </select>
       </label>
       <label>
         Статус
-        <select id="editStatus" ${canEdit ? "" : "disabled"}>
+        <select id="editStatus">
           ${STATUS.map(
-            (s) =>
-              `<option value="${s.key}" ${
-                task.status === s.key ? "selected" : ""
-              }>${s.label}</option>`
+            (s) => `<option value="${s.key}" ${task.status === s.key ? "selected" : ""}>${s.label}</option>`
           ).join("")}
         </select>
       </label>
       <label>
         Краен срок
-        <input id="editDueDate" type="date" value="${escapeHtml(task.dueDate || "")}" ${
-    canEdit ? "" : "disabled"
-  } />
+        <input id="editDueDate" type="date" value="${escapeHtml(task.dueDate || "")}" />
       </label>
-      <button id="saveTaskBtn" type="button" ${canEdit ? "" : "disabled"}>Запази промени</button>
+      <button id="saveTaskBtn" type="button">Запази промени</button>
     </div>
-
     <h3>Кой е видял задачата</h3>
     <div class="seen-list">
       ${seenItems || `<p class="muted">Все още никой не е отварял задачата.</p>`}
     </div>
-
     <h3>История на промените</h3>
     <div class="activity-list">
       ${activityItems || `<p class="muted">Няма активност.</p>`}
     </div>
   `;
 
-  document.getElementById("saveTaskBtn").addEventListener("click", () => {
-    saveTaskChanges(task.id);
+  document.getElementById("saveTaskBtn").addEventListener("click", async () => {
+    await saveTaskChanges(task.id);
   });
 }
 
-function saveTaskChanges(taskId) {
-  const task = getTaskById(taskId);
-  if (!task || !canEditTask(task)) return;
-
-  const updates = {
+async function saveTaskChanges(taskId) {
+  const payload = {
     title: document.getElementById("editTitle").value.trim(),
     description: document.getElementById("editDescription").value.trim(),
-    assignee: isCurrentUserManager()
-      ? document.getElementById("editAssignee").value
-      : state.currentUser,
+    assigneeId: document.getElementById("editAssignee").value,
     status: document.getElementById("editStatus").value,
     dueDate: document.getElementById("editDueDate").value,
   };
-
-  applyChange(task, "Заглавие", "title", updates.title);
-  applyChange(task, "Описание", "description", updates.description);
-  applyChange(task, "Отговорник", "assignee", updates.assignee);
-  applyChange(task, "Статус", "status", updates.status);
-  applyChange(task, "Краен срок", "dueDate", updates.dueDate);
-
-  markSeen(task.id);
-  saveState();
-  renderAll();
-}
-
-function applyChange(task, label, key, nextValue) {
-  const prev = task[key] || "";
-  const next = nextValue || "";
-  if (prev === next) return;
-  task[key] = nextValue;
-  task.activity.push({
-    at: Date.now(),
-    by: state.currentUser,
-    action: "Промяна",
-    detail: `${label}: "${prev || "-"}" -> "${next || "-"}"`,
-  });
-}
-
-function markSeen(taskId) {
-  const task = getTaskById(taskId);
-  if (!task || !canViewTask(task)) return;
-  task.seenBy[state.currentUser] = Date.now();
-  task.activity.push({
-    at: Date.now(),
-    by: state.currentUser,
-    action: "Преглед",
-    detail: "Отвори задачата",
-  });
-  saveState();
+  try {
+    await api(`/api/tasks/${taskId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    await loadTasks();
+  } catch (error) {
+    alert(error.message);
+  }
 }
 
 function formatDate(ts) {
