@@ -44,9 +44,19 @@ const els = {
   taskDescription: document.getElementById("taskDescription"),
   taskAssignee: document.getElementById("taskAssignee"),
   taskDueDate: document.getElementById("taskDueDate"),
+  taskGroup: document.getElementById("taskGroup"),
+  taskLabels: document.getElementById("taskLabels"),
   assigneeFilter: document.getElementById("assigneeFilter"),
+  searchInput: document.getElementById("searchInput"),
+  statusFilter: document.getElementById("statusFilter"),
+  dueFilter: document.getElementById("dueFilter"),
+  labelFilter: document.getElementById("labelFilter"),
+  toggleViewBtn: document.getElementById("toggleViewBtn"),
   accessHint: document.getElementById("accessHint"),
   board: document.getElementById("board"),
+  boardWrap: document.getElementById("boardWrap"),
+  tableWrap: document.getElementById("tableWrap"),
+  tasksTable: document.getElementById("tasksTable"),
   detailPanel: document.getElementById("detailPanel"),
 
   // People
@@ -76,10 +86,15 @@ const els = {
 const state = {
   me: null,
   route: "board",
+  boardView: "kanban", // kanban | table
   users: [],
   tasks: [],
   selectedTaskId: null,
   filter: "all",
+  search: "",
+  status: "",
+  due: "",
+  label: "",
   notifications: [],
   unread: 0,
   audit: [],
@@ -141,6 +156,27 @@ function bindEvents() {
   els.assigneeFilter.addEventListener("change", async () => {
     state.filter = els.assigneeFilter.value;
     await loadTasks();
+    renderShell();
+  });
+  els.searchInput.addEventListener("input", () => {
+    state.search = els.searchInput.value;
+    renderShell();
+  });
+  els.statusFilter.addEventListener("change", () => {
+    state.status = els.statusFilter.value;
+    renderShell();
+  });
+  els.dueFilter.addEventListener("change", () => {
+    state.due = els.dueFilter.value;
+    renderShell();
+  });
+  els.labelFilter.addEventListener("change", () => {
+    state.label = els.labelFilter.value;
+    renderShell();
+  });
+  els.toggleViewBtn.addEventListener("click", () => {
+    state.boardView = state.boardView === "kanban" ? "table" : "kanban";
+    renderShell();
   });
 
   // People
@@ -417,8 +453,17 @@ function renderShell() {
 function renderBoardRoute() {
   if (state.route !== "board") return;
   renderFilters();
-  renderBoard();
+  renderBoardView();
   renderDetails();
+}
+
+function renderBoardView() {
+  const showTable = state.boardView === "table";
+  els.boardWrap.classList.toggle("hidden", showTable);
+  els.tableWrap.classList.toggle("hidden", !showTable);
+  els.toggleViewBtn.textContent = showTable ? "Kanban" : "Table";
+  if (showTable) renderTable();
+  else renderBoard();
 }
 
 function renderPeopleRoute() {
@@ -478,6 +523,21 @@ function renderFilters() {
   els.accessHint.textContent = manager
     ? "Мениджърски изглед: виждаш всички задачи."
     : "Служителски изглед: виждаш само твоите задачи.";
+
+  // Populate label filter from available tasks.
+  const allLabels = new Set();
+  for (const t of state.tasks) {
+    for (const l of t.labels || []) allLabels.add(l);
+  }
+  const labelOptions = [`<option value=\"\">Всички етикети</option>`]
+    .concat(
+      Array.from(allLabels)
+        .sort()
+        .map((l) => `<option value=\"${escapeHtml(l)}\">${escapeHtml(l)}</option>`)
+    )
+    .join("");
+  els.labelFilter.innerHTML = labelOptions;
+  els.labelFilter.value = state.label || "";
 }
 
 async function onCreateTask(event) {
@@ -485,6 +545,11 @@ async function onCreateTask(event) {
   const title = els.taskTitle.value.trim();
   if (!title) return;
   const assigneeId = isManager() ? els.taskAssignee.value || state.me.id : state.me.id;
+  const group = els.taskGroup.value.trim();
+  const labels = els.taskLabels.value
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
   try {
     const result = await api("/api/tasks", {
       method: "POST",
@@ -493,6 +558,8 @@ async function onCreateTask(event) {
         description: els.taskDescription.value.trim(),
         dueDate: els.taskDueDate.value || "",
         assigneeId,
+        group,
+        labels,
       }),
     });
     els.taskForm.reset();
@@ -504,9 +571,47 @@ async function onCreateTask(event) {
   }
 }
 
+function filteredTasks() {
+  const q = state.search.trim().toLowerCase();
+  const status = state.status;
+  const due = state.due;
+  const label = state.label;
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const next7 = startOfToday + 7 * 24 * 60 * 60 * 1000;
+
+  return state.tasks.filter((t) => {
+    if (q) {
+      const hay = `${t.title} ${t.description} ${t.assigneeName} ${(t.labels || []).join(" ")} ${
+        t.group || ""
+      }`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    if (status && t.status !== status) return false;
+    if (label) {
+      const labels = t.labels || [];
+      if (!labels.includes(label)) return false;
+    }
+    if (due) {
+      const dueTs = t.dueDate ? Date.parse(t.dueDate) : NaN;
+      if (due === "nodue") {
+        if (t.dueDate) return false;
+      } else if (due === "overdue") {
+        if (!t.dueDate) return false;
+        if (!(dueTs < startOfToday)) return false;
+      } else if (due === "next7") {
+        if (!t.dueDate) return false;
+        if (!(dueTs >= startOfToday && dueTs <= next7)) return false;
+      }
+    }
+    return true;
+  });
+}
+
 function renderBoard() {
+  const tasksForBoard = filteredTasks();
   els.board.innerHTML = STATUS.map((s) => {
-    const tasks = state.tasks.filter((t) => t.status === s.key);
+    const tasks = tasksForBoard.filter((t) => t.status === s.key);
     const cards = tasks
       .map(
         (t) => `
@@ -514,6 +619,11 @@ function renderBoard() {
         <h4>${escapeHtml(t.title)}</h4>
         <p><strong>Отговорник:</strong> ${escapeHtml(t.assigneeName || "-")}</p>
         <p><strong>Краен срок:</strong> ${escapeHtml(t.dueDate || "-")}</p>
+        <p><strong>Група:</strong> ${escapeHtml(t.group || "General")}</p>
+        <p>${(t.labels || [])
+          .slice(0, 4)
+          .map((l) => `<span class="chip">${escapeHtml(l)}</span>`)
+          .join("")}</p>
         <p><strong>Видяно от:</strong> ${t.seenBy.length} души</p>
       </article>
     `
@@ -537,6 +647,111 @@ function renderBoard() {
       renderDetails();
     });
   });
+}
+
+function renderTable() {
+  const rows = filteredTasks();
+  const activeUsers = state.users.filter((u) => u.active !== false && u.deleted !== true);
+  const userOptions = activeUsers
+    .map((u) => `<option value="${escapeHtml(u.id)}">${escapeHtml(u.displayName)}</option>`)
+    .join("");
+
+  els.tasksTable.innerHTML = `
+    <div class="table">
+      <table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Assignee</th>
+            <th>Status</th>
+            <th>Due</th>
+            <th>Group</th>
+            <th>Labels</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map(
+              (t) => `
+            <tr data-id="${t.id}">
+              <td><input class="cell" data-field="title" value="${escapeHtml(t.title)}" /></td>
+              <td>
+                <select class="cell" data-field="assigneeId" ${isManager() ? "" : "disabled"}>
+                  ${activeUsers
+                    .map(
+                      (u) =>
+                        `<option value="${escapeHtml(u.id)}" ${u.id === t.assigneeId ? "selected" : ""}>${escapeHtml(
+                          u.displayName
+                        )}</option>`
+                    )
+                    .join("")}
+                </select>
+              </td>
+              <td>
+                <select class="cell" data-field="status">
+                  ${STATUS.map(
+                    (s) => `<option value="${s.key}" ${t.status === s.key ? "selected" : ""}>${s.label}</option>`
+                  ).join("")}
+                </select>
+              </td>
+              <td><input class="cell" data-field="dueDate" type="date" value="${escapeHtml(t.dueDate || "")}" /></td>
+              <td><input class="cell" data-field="group" value="${escapeHtml(t.group || "General")}" /></td>
+              <td><input class="cell" data-field="labels" value="${escapeHtml((t.labels || []).join(", "))}" /></td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  els.tasksTable.querySelectorAll("tr[data-id]").forEach((tr) => {
+    tr.addEventListener("click", (e) => {
+      if (e.target && e.target.classList.contains("cell")) return;
+      state.selectedTaskId = tr.dataset.id;
+      renderDetails();
+    });
+  });
+
+  els.tasksTable.querySelectorAll(".cell").forEach((el) => {
+    el.addEventListener("change", () => inlineUpdateRow(el));
+    el.addEventListener("blur", () => inlineUpdateRow(el));
+  });
+}
+
+const inlineTimers = new Map();
+function inlineUpdateRow(el) {
+  const tr = el.closest("tr[data-id]");
+  if (!tr) return;
+  const taskId = tr.dataset.id;
+  const field = el.dataset.field;
+  if (!field) return;
+  const key = `${taskId}:${field}`;
+  if (inlineTimers.has(key)) clearTimeout(inlineTimers.get(key));
+  inlineTimers.set(
+    key,
+    setTimeout(async () => {
+      inlineTimers.delete(key);
+      const payload = {};
+      if (field === "labels") {
+        payload.labels = String(el.value || "")
+          .split(",")
+          .map((x) => x.trim())
+          .filter(Boolean);
+      } else {
+        payload[field] = el.value;
+      }
+      try {
+        await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(payload) });
+        await loadTasks();
+        if (isManager()) await loadAudit();
+        renderShell();
+      } catch (e) {
+        alert(e.message);
+      }
+    }, 400)
+  );
 }
 
 function renderDetails() {
@@ -608,6 +823,14 @@ function renderDetails() {
         Краен срок
         <input id="editDueDate" type="date" value="${escapeHtml(task.dueDate || "")}" />
       </label>
+      <label>
+        Група
+        <input id="editGroup" value="${escapeHtml(task.group || "General")}" />
+      </label>
+      <label>
+        Етикети (със запетая)
+        <input id="editLabels" value="${escapeHtml((task.labels || []).join(", "))}" />
+      </label>
       <button id="saveTaskBtn" type="button">Запази промени</button>
     </div>
     <h4>Кой е видял задачата</h4>
@@ -632,6 +855,12 @@ async function saveTaskChanges(taskId) {
     assigneeId: document.getElementById("editAssignee").value,
     status: document.getElementById("editStatus").value,
     dueDate: document.getElementById("editDueDate").value,
+    group: document.getElementById("editGroup").value,
+    labels: document
+      .getElementById("editLabels")
+      .value.split(",")
+      .map((x) => x.trim())
+      .filter(Boolean),
   };
   try {
     await api(`/api/tasks/${taskId}`, { method: "PATCH", body: JSON.stringify(payload) });
@@ -949,4 +1178,3 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 }
-

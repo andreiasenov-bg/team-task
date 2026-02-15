@@ -198,6 +198,47 @@ select {
   color: var(--text);
 }
 
+.table {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: auto;
+}
+
+.table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.table th,
+.table td {
+  border-bottom: 1px solid var(--line);
+  padding: 10px 10px;
+  vertical-align: top;
+}
+
+.table th {
+  text-align: left;
+  position: sticky;
+  top: 0;
+  background: #fbfdff;
+  z-index: 1;
+}
+
+.table tr:hover td {
+  background: #fbfdff;
+}
+
+.chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #eef3ff;
+  margin-right: 6px;
+  margin-bottom: 6px;
+  font-size: 0.78rem;
+}
+
 input[disabled] {
   background: #f4f7fc;
 }

@@ -98,6 +98,14 @@
                     Краен срок
                     <input id="taskDueDate" type="date" />
                   </label>
+                  <label>
+                    Група
+                    <input id="taskGroup" type="text" placeholder="General" />
+                  </label>
+                  <label>
+                    Етикети (със запетая)
+                    <input id="taskLabels" type="text" placeholder="urgent, client" />
+                  </label>
                   <button type="submit">Създай</button>
                 </form>
               </section>
@@ -108,12 +116,34 @@
                     <h3>Задачи</h3>
                     <p id="accessHint" class="muted"></p>
                   </div>
-                  <label>
-                    Филтър по човек
-                    <select id="assigneeFilter"></select>
-                  </label>
+                  <div class="inline">
+                    <input id="searchInput" type="text" placeholder="Търси..." />
+                    <select id="statusFilter">
+                      <option value="">Всички статуси</option>
+                      <option value="todo">To Do</option>
+                      <option value="inprogress">In Progress</option>
+                      <option value="done">Done</option>
+                    </select>
+                    <select id="dueFilter">
+                      <option value="">Всички срокове</option>
+                      <option value="overdue">Просрочени</option>
+                      <option value="next7">Следващи 7 дни</option>
+                      <option value="nodue">Без срок</option>
+                    </select>
+                    <select id="labelFilter"></select>
+                    <label>
+                      Отговорник
+                      <select id="assigneeFilter"></select>
+                    </label>
+                    <button id="toggleViewBtn" type="button" class="btn-secondary">Table</button>
+                  </div>
                 </div>
-                <div id="board" class="board"></div>
+                <div id="boardWrap">
+                  <div id="board" class="board"></div>
+                </div>
+                <div id="tableWrap" class="hidden">
+                  <div id="tasksTable" class="table"></div>
+                </div>
               </section>
 
               <aside class="panel detail-panel" id="detailPanel">

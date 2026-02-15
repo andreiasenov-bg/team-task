@@ -102,9 +102,13 @@ async function main() {
       description: "QA flow",
       dueDate: "",
       assigneeId: petarId,
+      group: "QA",
+      labels: ["urgent", "client"],
     });
     assert.equal(createTask.status, 201);
     const petarTaskId = createTask.json.task.id;
+    assert.equal(createTask.json.task.group, "QA");
+    assert.ok(Array.isArray(createTask.json.task.labels));
 
     const ivan = new Client();
     const ivanLogin = await ivan.request("POST", "/api/auth/login", {
@@ -159,9 +163,13 @@ async function main() {
 
     const petarUpdate = await petar.request("PATCH", `/api/tasks/${petarTaskId}`, {
       status: "done",
+      group: "Done Group",
+      labels: ["done"],
     });
     assert.equal(petarUpdate.status, 200);
     assert.equal(petarUpdate.json.task.status, "done");
+    assert.equal(petarUpdate.json.task.group, "Done Group");
+    assert.ok(petarUpdate.json.task.labels.includes("done"));
 
     const managerNotifs = await manager.request("GET", "/api/notifications");
     assert.equal(managerNotifs.status, 200);

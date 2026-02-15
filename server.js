@@ -108,6 +108,8 @@ function createSeedData() {
     assigneeId: users[1].id,
     dueDate: "",
     status: "todo",
+    group: "General",
+    labels: ["reporting"],
     createdAt: now(),
     createdById: users[0].id,
     seenBy: {},
@@ -132,7 +134,13 @@ function normalizeData(raw) {
     deletedAt: user.deletedAt ? Number(user.deletedAt) : undefined,
     phone: typeof user.phone === "string" ? user.phone : "",
   }));
-  const tasks = Array.isArray(raw.tasks) ? raw.tasks : [];
+  const tasks = (Array.isArray(raw.tasks) ? raw.tasks : []).map((t) => ({
+    ...t,
+    group: typeof t.group === "string" && t.group.trim() ? t.group.trim() : "General",
+    labels: Array.isArray(t.labels)
+      ? t.labels.map((x) => String(x).trim()).filter(Boolean).slice(0, 20)
+      : [],
+  }));
   const notifications = Array.isArray(raw.notifications) ? raw.notifications : [];
   const audit = Array.isArray(raw.audit) ? raw.audit : [];
   return { users, tasks, notifications, audit };
@@ -389,6 +397,8 @@ function enrichTask(task, data) {
       : "Няма",
     dueDate: task.dueDate,
     status: task.status,
+    group: task.group || "General",
+    labels: Array.isArray(task.labels) ? task.labels : [],
     createdAt: task.createdAt,
     createdBy: createdBy ? createdBy.displayName : "Непознат",
     seenBy,
@@ -428,6 +438,26 @@ function applyTaskChanges(task, body, actor, data) {
   if (typeof body.dueDate === "string" && body.dueDate !== task.dueDate) {
     changes.push(`Краен срок: "${task.dueDate || "-"}" -> "${body.dueDate || "-"}"`);
     task.dueDate = body.dueDate;
+  }
+  if (typeof body.group === "string") {
+    const next = body.group.trim();
+    const prev = task.group || "General";
+    const normalized = next || "General";
+    if (normalized !== prev) {
+      changes.push(`Група: "${prev}" -> "${normalized}"`);
+      task.group = normalized;
+    }
+  }
+  if (Array.isArray(body.labels)) {
+    const prev = Array.isArray(task.labels) ? task.labels : [];
+    const next = body.labels
+      .map((x) => String(x).trim())
+      .filter(Boolean)
+      .slice(0, 20);
+    if (JSON.stringify(prev) !== JSON.stringify(next)) {
+      changes.push(`Етикети: "${prev.join(", ") || "-"}" -> "${next.join(", ") || "-"}"`);
+      task.labels = next;
+    }
   }
   if (typeof body.assigneeId === "string" && body.assigneeId !== task.assigneeId) {
     const target = data.users.find((u) => u.id === body.assigneeId);
@@ -874,6 +904,10 @@ async function handleRequest(req, res) {
         sendJson(res, 400, { error: "Невалиден отговорник" });
         return;
       }
+      const group = typeof body.group === "string" && body.group.trim() ? body.group.trim() : "General";
+      const labels = Array.isArray(body.labels)
+        ? body.labels.map((x) => String(x).trim()).filter(Boolean).slice(0, 20)
+        : [];
       const task = {
         id: crypto.randomUUID(),
         title,
@@ -881,6 +915,8 @@ async function handleRequest(req, res) {
         assigneeId,
         dueDate: String(body.dueDate || ""),
         status: "todo",
+        group,
+        labels,
         createdAt: now(),
         createdById: session.user.id,
         seenBy: {},
