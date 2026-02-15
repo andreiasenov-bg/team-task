@@ -1,4 +1,5 @@
 const http = require("http");
+const https = require("https");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
@@ -14,8 +15,36 @@ const STATUS = new Set(["todo", "inprogress", "done"]);
 
 const sessions = new Map();
 
+loadDotEnv();
+
 function now() {
   return Date.now();
+}
+
+function loadDotEnv() {
+  // Optional local env file; avoids adding dependencies.
+  const envPath = path.join(__dirname, ".env");
+  if (!fs.existsSync(envPath)) return;
+  try {
+    const raw = fs.readFileSync(envPath, "utf8");
+    for (const line of raw.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const idx = trimmed.indexOf("=");
+      if (idx === -1) continue;
+      const key = trimmed.slice(0, idx).trim();
+      let value = trimmed.slice(idx + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (!(key in process.env)) process.env[key] = value;
+    }
+  } catch {
+    // ignore
+  }
 }
 
 function readData() {
@@ -43,6 +72,7 @@ function createSeedData() {
       displayName: "Мениджър",
       role: "manager",
       active: true,
+      phone: "",
       passwordHash: managerPassword.hash,
       passwordSalt: managerPassword.salt,
       createdAt: now(),
@@ -53,6 +83,7 @@ function createSeedData() {
       displayName: "Иван",
       role: "employee",
       active: true,
+      phone: "",
       passwordHash: employeePassword.hash,
       passwordSalt: employeePassword.salt,
       createdAt: now(),
@@ -63,6 +94,7 @@ function createSeedData() {
       displayName: "Мария",
       role: "employee",
       active: true,
+      phone: "",
       passwordHash: employeePassword.hash,
       passwordSalt: employeePassword.salt,
       createdAt: now(),
@@ -98,6 +130,7 @@ function normalizeData(raw) {
     active: user.active !== false,
     deleted: user.deleted === true,
     deletedAt: user.deletedAt ? Number(user.deletedAt) : undefined,
+    phone: typeof user.phone === "string" ? user.phone : "",
   }));
   const tasks = Array.isArray(raw.tasks) ? raw.tasks : [];
   const notifications = Array.isArray(raw.notifications) ? raw.notifications : [];
@@ -198,6 +231,7 @@ function publicUser(user) {
     active: user.active !== false,
     deleted: user.deleted === true,
     deletedAt: user.deletedAt || null,
+    phone: user.phone || "",
   };
 }
 
@@ -205,6 +239,94 @@ function revokeUserSessions(userId) {
   for (const [token, s] of sessions.entries()) {
     if (s.userId === userId) sessions.delete(token);
   }
+}
+
+function isValidE164(phone) {
+  // E.164: + and digits, 8-15 digits total (common practical constraint).
+  return typeof phone === "string" && /^\+[1-9]\d{7,14}$/.test(phone);
+}
+
+function whatsappConfig() {
+  const enabled = String(process.env.WHATSAPP_ENABLED || "").toLowerCase() === "true" || process.env.WHATSAPP_ENABLED === "1";
+  const dryRun = String(process.env.WHATSAPP_DRY_RUN || "").toLowerCase() === "true" || process.env.WHATSAPP_DRY_RUN === "1";
+  return {
+    enabled,
+    dryRun,
+    graphVersion: process.env.WHATSAPP_GRAPH_VERSION || "v19.0",
+    phoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+    accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "",
+    templateTaskDone: process.env.WHATSAPP_TEMPLATE_TASK_DONE || "task_done",
+    templateLang: process.env.WHATSAPP_TEMPLATE_LANG || "bg",
+    baseUrl: process.env.PUBLIC_BASE_URL || `http://${HOST}:${PORT}`,
+  };
+}
+
+function postJson(url, headers, body) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const transport = u.protocol === "https:" ? https : http;
+    const defaultPort = u.protocol === "https:" ? 443 : 80;
+    const req = transport.request(
+      {
+        method: "POST",
+        hostname: u.hostname,
+        port: u.port || defaultPort,
+        path: u.pathname + u.search,
+        headers: {
+          "Content-Type": "application/json",
+          ...headers,
+        },
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk.toString()));
+        res.on("end", () => {
+          try {
+            const parsed = data ? JSON.parse(data) : {};
+            if (res.statusCode >= 200 && res.statusCode < 300) resolve(parsed);
+            else reject(new Error(parsed.error && parsed.error.message ? parsed.error.message : `HTTP ${res.statusCode}`));
+          } catch {
+            reject(new Error(`HTTP ${res.statusCode}`));
+          }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.write(JSON.stringify(body));
+    req.end();
+  });
+}
+
+async function sendWhatsAppTemplate(toE164, templateName, languageCode, components) {
+  const cfg = whatsappConfig();
+  if (!cfg.enabled) return { skipped: true, reason: "disabled" };
+  if (!cfg.phoneNumberId || !cfg.accessToken) return { skipped: true, reason: "missing_config" };
+  if (!isValidE164(toE164)) return { skipped: true, reason: "invalid_to" };
+
+  const url = `https://graph.facebook.com/${cfg.graphVersion}/${cfg.phoneNumberId}/messages`;
+  const payload = {
+    messaging_product: "whatsapp",
+    to: toE164.replace("+", ""), // Cloud API expects phone number without '+'
+    type: "template",
+    template: {
+      name: templateName,
+      language: { code: languageCode },
+      ...(components && components.length ? { components } : {}),
+    },
+  };
+
+  if (cfg.dryRun) {
+    console.log("[WHATSAPP_DRY_RUN]", JSON.stringify({ url, payload }));
+    return { ok: true, dryRun: true };
+  }
+
+  return postJson(
+    url,
+    {
+      Authorization: `Bearer ${cfg.accessToken}`,
+    },
+    payload
+  );
 }
 
 function canViewTask(task, user) {
@@ -431,6 +553,7 @@ async function handleRequest(req, res) {
       const displayName = String(body.displayName || "").trim();
       const password = String(body.password || "");
       const role = body.role === "manager" ? "manager" : "employee";
+      const phone = String(body.phone || "").trim();
       if (!/^[a-z0-9._-]{3,30}$/.test(username)) {
         sendJson(res, 400, {
           error: "Username: 3-30 символа, само малки букви, цифри, точка, тире или _",
@@ -439,6 +562,10 @@ async function handleRequest(req, res) {
       }
       if (!username || !displayName || password.length < 6) {
         sendJson(res, 400, { error: "Попълни username, име и парола (мин. 6 символа)" });
+        return;
+      }
+      if (phone && !isValidE164(phone)) {
+        sendJson(res, 400, { error: "Телефонът трябва да е във формат +359..." });
         return;
       }
       if (data.users.some((u) => u.username.toLowerCase() === username)) {
@@ -453,6 +580,7 @@ async function handleRequest(req, res) {
         role,
         active: true,
         deleted: false,
+        phone,
         passwordHash: hashed.hash,
         passwordSalt: hashed.salt,
         createdAt: now(),
@@ -509,6 +637,15 @@ async function handleRequest(req, res) {
         const hashed = hashPassword(body.password);
         target.passwordHash = hashed.hash;
         target.passwordSalt = hashed.salt;
+      }
+
+      if (typeof body.phone === "string") {
+        const phone = body.phone.trim();
+        if (phone && !isValidE164(phone)) {
+          sendJson(res, 400, { error: "Телефонът трябва да е във формат +359..." });
+          return;
+        }
+        target.phone = phone;
       }
 
       if (typeof body.active === "boolean") {
@@ -713,6 +850,7 @@ async function handleRequest(req, res) {
 
       if (statusChangedToDone) {
         data.notifications = data.notifications || [];
+        const cfg = whatsappConfig();
         const managers = data.users.filter(
           (u) =>
             u.role === "manager" &&
@@ -729,6 +867,30 @@ async function handleRequest(req, res) {
             message: `Задача "${task.title}" е приключена от ${session.user.displayName}`,
             createdAt: now(),
             readAt: null,
+          });
+        }
+
+        // Fire-and-forget WhatsApp notifications (won't block API response).
+        const recipients = managers.filter((m) => isValidE164(m.phone));
+        if (cfg.enabled && recipients.length) {
+          const link = cfg.baseUrl;
+          setImmediate(async () => {
+            for (const m of recipients) {
+              try {
+                await sendWhatsAppTemplate(m.phone, cfg.templateTaskDone, cfg.templateLang, [
+                  {
+                    type: "body",
+                    parameters: [
+                      { type: "text", text: task.title },
+                      { type: "text", text: session.user.displayName },
+                      { type: "text", text: link },
+                    ],
+                  },
+                ]);
+              } catch (e) {
+                console.error("[WHATSAPP] send failed:", e && e.message ? e.message : e);
+              }
+            }
           });
         }
       }

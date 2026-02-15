@@ -20,6 +20,7 @@ const els = {
   currentRoleBadge: document.getElementById("currentRoleBadge"),
   newUserUsername: document.getElementById("newUserUsername"),
   newUserInput: document.getElementById("newUserInput"),
+  newUserPhone: document.getElementById("newUserPhone"),
   newUserPassword: document.getElementById("newUserPassword"),
   newUserRole: document.getElementById("newUserRole"),
   addUserBtn: document.getElementById("addUserBtn"),
@@ -223,6 +224,7 @@ async function onAddUser() {
   if (!isManager()) return;
   const username = els.newUserUsername.value.trim().toLowerCase();
   const displayName = els.newUserInput.value.trim();
+  const phone = els.newUserPhone.value.trim();
   const password = els.newUserPassword.value;
   if (!username || !displayName || password.length < 6) {
     alert("Попълни username, име и парола (мин. 6 символа).");
@@ -234,12 +236,14 @@ async function onAddUser() {
       body: JSON.stringify({
         username,
         displayName,
+        phone,
         password,
         role: els.newUserRole.value,
       }),
     });
     els.newUserUsername.value = "";
     els.newUserInput.value = "";
+    els.newUserPhone.value = "";
     els.newUserPassword.value = "";
     await loadUsers();
     renderAll();
@@ -292,6 +296,7 @@ function renderHeader() {
   const manager = isManager();
   els.newUserUsername.disabled = !manager;
   els.newUserInput.disabled = !manager;
+  els.newUserPhone.disabled = !manager;
   els.newUserPassword.disabled = !manager;
   els.newUserRole.disabled = !manager;
   els.addUserBtn.disabled = !manager;
@@ -351,6 +356,14 @@ function renderUserAdmin() {
         </h4>
         <p class="muted">Роля: ${ROLE_LABELS[u.role]}</p>
         <div class="user-actions">
+          <input type="text" id="phone-${u.id}" placeholder="+359..." value="${escapeHtml(u.phone || "")}" ${
+            isDeleted ? "disabled" : ""
+          } />
+          <button class="btn-secondary" type="button" data-action="save-phone" data-user-id="${u.id}" ${
+            isDeleted ? "disabled" : ""
+          }>
+            Запази телефон
+          </button>
           <input type="password" id="pwd-${u.id}" placeholder="нова парола (мин 6)" ${isDeleted ? "disabled" : ""} />
           <button class="btn-secondary" type="button" data-action="reset-password" data-user-id="${u.id}" ${
             isDeleted ? "disabled" : ""
@@ -499,6 +512,22 @@ async function onUserAdminClick(event) {
       });
       if (input) input.value = "";
       alert(`Паролата на ${user.displayName} е сменена.`);
+    } catch (error) {
+      alert(error.message);
+    }
+    return;
+  }
+
+  if (action === "save-phone") {
+    const input = document.getElementById(`phone-${userId}`);
+    const phone = input ? input.value.trim() : "";
+    try {
+      await api(`/api/users/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ phone }),
+      });
+      await loadUsers();
+      renderAll();
     } catch (error) {
       alert(error.message);
     }
