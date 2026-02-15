@@ -34,6 +34,7 @@
           </label>
           <button type="submit">Влез</button>
           <p id="authError" class="error"></p>
+          <p id="jsStatus" class="muted"></p>
         </form>
         <p class="muted">Demo: manager / admin123</p>
       </section>
@@ -135,5 +136,17 @@
     </div>
 
     <script src="./app.js"></script>
+    <script>
+      // If app.js doesn't load/execute, make it obvious.
+      setTimeout(() => {
+        const el = document.getElementById("jsStatus");
+        if (!el) return;
+        if (window.__TASK_APP_READY__) {
+          el.textContent = "JS: OK";
+        } else {
+          el.textContent = "JS: NOT LOADED (провери Network -> app.js / кеш / extension)";
+        }
+      }, 200);
+    </script>
   </body>
 </html>

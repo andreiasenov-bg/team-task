@@ -481,7 +481,11 @@ function routeStatic(req, res) {
       ".js": "application/javascript; charset=utf-8",
       ".json": "application/json; charset=utf-8",
     };
-    res.writeHead(200, { "Content-Type": types[ext] || "application/octet-stream" });
+    // Avoid confusing cache issues while iterating locally.
+    res.writeHead(200, {
+      "Content-Type": types[ext] || "application/octet-stream",
+      "Cache-Control": "no-store",
+    });
     res.end(content);
   });
 }

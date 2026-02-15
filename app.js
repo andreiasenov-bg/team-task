@@ -3,6 +3,9 @@ const ROLE_LABELS = {
   employee: "Служител",
 };
 
+// Used by index.html to detect whether app.js executed.
+window.__TASK_APP_READY__ = true;
+
 const STATUS = [
   { key: "todo", label: "To Do", tagClass: "todo" },
   { key: "inprogress", label: "In Progress", tagClass: "inprogress" },
@@ -56,12 +59,41 @@ const state = {
 
 let notifTimer = null;
 let seenNotifIds = new Set();
+const hasNotifUI =
+  !!els.notifBtn &&
+  !!els.notifBadge &&
+  !!els.notifPanel &&
+  !!els.notifList &&
+  !!els.readAllBtn &&
+  !!els.enableWebNotifBtn;
 
 init();
 
 async function init() {
+  installGlobalErrorHandlers();
   bindEvents();
   await restoreSession();
+}
+
+function installGlobalErrorHandlers() {
+  window.addEventListener("error", (event) => {
+    const msg = event && event.message ? event.message : "Unknown error";
+    showAuthError(`JS error: ${msg}`);
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    const reason = event && event.reason ? event.reason : null;
+    const msg = reason && reason.message ? reason.message : String(reason || "Unknown promise rejection");
+    showAuthError(`Promise error: ${msg}`);
+  });
+}
+
+function showAuthError(message) {
+  if (els.authError) {
+    els.authError.textContent = message;
+  } else {
+    // Fallback if the DOM is out of sync.
+    alert(message);
+  }
 }
 
 function bindEvents() {
@@ -75,15 +107,17 @@ function bindEvents() {
   });
   els.userAdminList.addEventListener("click", onUserAdminClick);
 
-  els.notifBtn.addEventListener("click", () => {
-    els.notifPanel.classList.toggle("hidden");
-    if (!els.notifPanel.classList.contains("hidden")) {
-      renderNotifications();
-    }
-  });
-  els.notifList.addEventListener("click", onNotifClick);
-  els.readAllBtn.addEventListener("click", onReadAllNotifs);
-  els.enableWebNotifBtn.addEventListener("click", enableWebNotifications);
+  if (hasNotifUI) {
+    els.notifBtn.addEventListener("click", () => {
+      els.notifPanel.classList.toggle("hidden");
+      if (!els.notifPanel.classList.contains("hidden")) {
+        renderNotifications();
+      }
+    });
+    els.notifList.addEventListener("click", onNotifClick);
+    els.readAllBtn.addEventListener("click", onReadAllNotifs);
+    els.enableWebNotifBtn.addEventListener("click", enableWebNotifications);
+  }
 }
 
 async function api(url, options = {}) {
@@ -117,11 +151,31 @@ function showAuth() {
   state.me = null;
   els.authView.classList.remove("hidden");
   els.appView.classList.add("hidden");
+  if (location.hash !== "#login") history.replaceState(null, "", "#login");
+  scrollToTop();
 }
 
 function showApp() {
   els.authView.classList.add("hidden");
   els.appView.classList.remove("hidden");
+  if (location.hash !== "#app") history.replaceState(null, "", "#app");
+  // Ensure the user lands at the top of the dashboard after login.
+  scrollToTop();
+  try {
+    els.appView.scrollIntoView({ block: "start", behavior: "auto" });
+  } catch {
+    // ignore
+  }
+}
+
+function scrollToTop() {
+  try {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  } catch {
+    window.scrollTo(0, 0);
+  }
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
 }
 
 function isManager() {
@@ -132,14 +186,16 @@ async function bootstrapApp() {
   showApp();
   await loadUsers();
   await loadTasks();
-  await loadNotifications();
-  startNotifPolling();
+  if (hasNotifUI) {
+    await loadNotifications();
+    startNotifPolling();
+  }
   renderAll();
 }
 
 async function onLogin(event) {
   event.preventDefault();
-  els.authError.textContent = "";
+  showAuthError("");
   try {
     const result = await api("/api/auth/login", {
       method: "POST",
@@ -149,10 +205,27 @@ async function onLogin(event) {
       }),
     });
     state.me = result.user;
+
+    // Verify the session cookie actually sticks (some browsers/settings block it).
+    const meCheck = await api("/api/auth/me");
+    if (!meCheck.user) {
+      showAuthError(
+        "Login OK, но сесията не се запазва (cookies са блокирани). Разреши cookies за 127.0.0.1."
+      );
+      state.me = null;
+      return;
+    }
+
     els.loginForm.reset();
-    await bootstrapApp();
+    try {
+      await bootstrapApp();
+    } catch (e) {
+      showAuthError(e && e.message ? e.message : "Грешка при зареждане след вход.");
+      state.me = null;
+      showAuth();
+    }
   } catch (error) {
-    els.authError.textContent = error.message;
+    showAuthError(error.message);
   }
 }
 
@@ -284,9 +357,11 @@ function renderAll() {
   renderUserAdmin();
   renderBoard();
   renderDetails();
-  renderNotifBadge();
-  if (!els.notifPanel.classList.contains("hidden")) {
-    renderNotifications();
+  if (hasNotifUI) {
+    renderNotifBadge();
+    if (!els.notifPanel.classList.contains("hidden")) {
+      renderNotifications();
+    }
   }
 }
 
@@ -302,7 +377,9 @@ function renderHeader() {
   els.addUserBtn.disabled = !manager;
   els.taskAssignee.disabled = !manager;
   els.userAdminPanel.classList.toggle("hidden", !manager);
-  els.enableWebNotifBtn.classList.toggle("hidden", !manager);
+  if (hasNotifUI) {
+    els.enableWebNotifBtn.classList.toggle("hidden", !manager);
+  }
 }
 
 function renderFilters() {
@@ -401,11 +478,13 @@ function renderUserAdmin() {
 }
 
 function renderNotifBadge() {
+  if (!hasNotifUI) return;
   els.notifBadge.textContent = String(state.unread || 0);
   els.notifBadge.style.opacity = state.unread ? "1" : "0.45";
 }
 
 function renderNotifications() {
+  if (!hasNotifUI) return;
   if (!state.me) return;
   const items = state.notifications || [];
   if (!items.length) {
