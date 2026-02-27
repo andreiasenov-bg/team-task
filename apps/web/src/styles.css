@@ -295,6 +295,21 @@ button:active {
   border-color: #bed0ea;
   box-shadow: none;
   border-radius: 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.kpi-item:hover {
+  transform: translateY(-1px);
+  border-color: #8db4e6;
+  background: #e4efff;
+  box-shadow: 0 7px 16px rgba(9, 30, 66, 0.12);
+}
+
+.kpi-item:focus-visible {
+  outline: 2px solid #0c66e4;
+  outline-offset: 1px;
 }
 
 .kpi-item span {

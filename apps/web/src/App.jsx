@@ -361,6 +361,8 @@ export default function App() {
   const socketRef = useRef(null);
   const taskTitleInputRef = useRef(null);
   const searchInputRef = useRef(null);
+  const filterBarRef = useRef(null);
+  const adminInboxRef = useRef(null);
 
   const [taskForm, setTaskForm] = useState({
     title: "",
@@ -933,6 +935,74 @@ export default function App() {
       setDueFilter("");
       setSlaFilter("sla_escalated");
       setIncludeArchived(false);
+    }
+  }
+
+  function scrollToRef(ref) {
+    if (!ref || !ref.current) return;
+    requestAnimationFrame(() => {
+      ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  function onKpiNavigate(metricKey) {
+    setViewMode("board");
+    setActiveSavedViewId("");
+
+    if (metricKey === "active") {
+      applyQuickFilter("all");
+      scrollToRef(filterBarRef);
+      return;
+    }
+    if (metricKey === "overdue") {
+      applyQuickFilter("overdue");
+      scrollToRef(filterBarRef);
+      return;
+    }
+    if (metricKey === "pendingReviewLate") {
+      setActiveQuickFilter("custom");
+      setStatusFilter("done");
+      setReviewFilter("pending");
+      setDueFilter("");
+      setSlaFilter("");
+      setIncludeArchived(false);
+      if (!isEmployee) setAssigneeFilter("");
+      if (isPrivileged) {
+        scrollToRef(adminInboxRef);
+      } else {
+        scrollToRef(filterBarRef);
+      }
+      return;
+    }
+    if (metricKey === "slaOverdue") {
+      setActiveQuickFilter("custom");
+      setStatusFilter("");
+      setReviewFilter("");
+      setDueFilter("");
+      setSlaFilter("sla_overdue");
+      setIncludeArchived(false);
+      if (!isEmployee) setAssigneeFilter("");
+      scrollToRef(filterBarRef);
+      return;
+    }
+    if (metricKey === "slaEscalated") {
+      applyQuickFilter("escalated");
+      if (isPrivileged) {
+        scrollToRef(adminInboxRef);
+      } else {
+        scrollToRef(filterBarRef);
+      }
+      return;
+    }
+    if (metricKey === "archived") {
+      setActiveQuickFilter("custom");
+      setStatusFilter("");
+      setReviewFilter("");
+      setDueFilter("");
+      setSlaFilter("");
+      setIncludeArchived(true);
+      if (!isEmployee) setAssigneeFilter("");
+      scrollToRef(filterBarRef);
     }
   }
 
@@ -1602,16 +1672,36 @@ export default function App() {
       </header>
 
       <section className="kpi-grid">
-        <article className="card kpi-item"><span>Active</span><strong>{kpis.active}</strong></article>
-        <article className="card kpi-item"><span>Overdue</span><strong>{kpis.overdue}</strong></article>
-        <article className="card kpi-item"><span>Review SLA &gt;24h</span><strong>{kpis.pendingReviewLate}</strong></article>
-        <article className="card kpi-item"><span>SLA Overdue</span><strong>{kpis.slaOverdue}</strong></article>
-        <article className="card kpi-item"><span>SLA Escalated</span><strong>{kpis.slaEscalated}</strong></article>
-        <article className="card kpi-item"><span>Archived</span><strong>{kpis.archived}</strong></article>
+        {[
+          { key: "active", label: "Active", value: kpis.active },
+          { key: "overdue", label: "Overdue", value: kpis.overdue },
+          { key: "pendingReviewLate", label: "Review SLA >24h", value: kpis.pendingReviewLate },
+          { key: "slaOverdue", label: "SLA Overdue", value: kpis.slaOverdue },
+          { key: "slaEscalated", label: "SLA Escalated", value: kpis.slaEscalated },
+          { key: "archived", label: "Archived", value: kpis.archived },
+        ].map((item) => (
+          <article
+            key={item.key}
+            className="card kpi-item"
+            role="button"
+            tabIndex={0}
+            onClick={() => onKpiNavigate(item.key)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onKpiNavigate(item.key);
+              }
+            }}
+            title={`Open ${item.label}`}
+          >
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+          </article>
+        ))}
       </section>
 
       {isPrivileged ? (
-        <section className="card admin-inbox">
+        <section ref={adminInboxRef} className="card admin-inbox">
           <div className="admin-inbox-head">
             <h2>Admin Inbox</h2>
             <small>Fast action queue for review and escalations</small>
@@ -1904,7 +1994,7 @@ export default function App() {
         </section>
       ) : null}
 
-      <section className="card filter-bar">
+      <section ref={filterBarRef} className="card filter-bar">
         <input
           ref={searchInputRef}
           placeholder="Search title/description"
