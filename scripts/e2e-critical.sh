@@ -63,7 +63,6 @@ EMPLOYEE_LOGIN="$(api_expect_code 200 POST "$NEW_API_BASE/auth/login" "" "{\"ema
 ADMIN_TOKEN="$(node -e 'const x=JSON.parse(process.argv[1]);process.stdout.write(x.token||"")' "$ADMIN_LOGIN")"
 MANAGER_TOKEN="$(node -e 'const x=JSON.parse(process.argv[1]);process.stdout.write(x.token||"")' "$MANAGER_LOGIN")"
 EMPLOYEE_TOKEN="$(node -e 'const x=JSON.parse(process.argv[1]);process.stdout.write(x.token||"")' "$EMPLOYEE_LOGIN")"
-ADMIN_ID="$(node -e 'const x=JSON.parse(process.argv[1]);process.stdout.write((x.user&&x.user.id)||"")' "$ADMIN_LOGIN")"
 if [ -z "$ADMIN_TOKEN" ] || [ -z "$MANAGER_TOKEN" ] || [ -z "$EMPLOYEE_TOKEN" ]; then
   echo "Missing one or more auth tokens"
   exit 1
@@ -81,9 +80,8 @@ fi
 
 MEMBERS_JSON="$(api_expect_code 200 GET "$NEW_API_BASE/projects/$PROJECT_ID/members" "$ADMIN_TOKEN")"
 EMPLOYEE_ID="$(node -e 'const x=JSON.parse(process.argv[1]);const u=(x.members||[]).find((m)=>m.role==="employee");process.stdout.write(u?u.id:"")' "$MEMBERS_JSON")"
-MANAGER_ID="$(node -e 'const x=JSON.parse(process.argv[1]);const u=(x.members||[]).find((m)=>m.role==="manager");process.stdout.write(u?u.id:"")' "$MEMBERS_JSON")"
-if [ -z "$EMPLOYEE_ID" ] || [ -z "$MANAGER_ID" ]; then
-  echo "Project members missing employee/manager"
+if [ -z "$EMPLOYEE_ID" ]; then
+  echo "Project members missing employee"
   exit 1
 fi
 echo "project=$PROJECT_ID"
@@ -116,10 +114,10 @@ echo "ok"
 echo
 echo "== ACL checks (employee forbidden on foreign + review) =="
 ADMIN_TASKS="$(api_expect_code 200 GET "$NEW_API_BASE/tasks?projectId=$PROJECT_ID" "$ADMIN_TOKEN")"
-FOREIGN_TASK_ID="$(node -e 'const x=JSON.parse(process.argv[1]);const emp=process.argv[2];const t=(x.tasks||[]).find((row)=>row.assigned_to && row.assigned_to!==emp);process.stdout.write(t?t.id:"")' "$ADMIN_TASKS" "$EMPLOYEE_ID")"
+FOREIGN_TASK_ID="$(node -e 'const x=JSON.parse(process.argv[1]);const emp=process.argv[2];const t=(x.tasks||[]).find((row)=>!row.archived_at && (row.assigned_to!==emp));process.stdout.write(t?t.id:"")' "$ADMIN_TASKS" "$EMPLOYEE_ID")"
 if [ -z "$FOREIGN_TASK_ID" ]; then
-  FOREIGN_CREATE="$(api_expect_code 201 POST "$NEW_API_BASE/tasks" "$ADMIN_TOKEN" "{\"projectId\":\"$PROJECT_ID\",\"assignedTo\":\"$MANAGER_ID\",\"title\":\"E2E Foreign $(date +%s)\",\"priority\":\"low\",\"status\":\"todo\"}")"
-  FOREIGN_TASK_ID="$(node -e 'const x=JSON.parse(process.argv[1]);process.stdout.write((x.task&&x.task.id)||"")' "$FOREIGN_CREATE")"
+  echo "No foreign task found for ACL validation"
+  exit 1
 fi
 api_expect_code 403 POST "$NEW_API_BASE/tasks/$FOREIGN_TASK_ID/comments" "$EMPLOYEE_TOKEN" "{\"content\":\"should fail\"}" >/dev/null
 api_expect_code 403 GET "$NEW_API_BASE/tasks/$FOREIGN_TASK_ID/attachments" "$EMPLOYEE_TOKEN" >/dev/null
