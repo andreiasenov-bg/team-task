@@ -451,6 +451,20 @@ export default function App() {
     };
   }, [tasks]);
 
+  const adminInbox = useMemo(() => {
+    if (!isPrivileged) return { reviewQueue: [], slaEscalated: [] };
+    const active = tasks.filter((task) => !task.archived_at);
+    const reviewQueue = active
+      .filter((task) => task.status === "done" && task.review_status === "pending")
+      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+      .slice(0, 8);
+    const slaEscalated = active
+      .filter((task) => isSlaEscalated(task))
+      .sort((a, b) => new Date(b.sla_escalated_at || b.updated_at).getTime() - new Date(a.sla_escalated_at || a.updated_at).getTime())
+      .slice(0, 8);
+    return { reviewQueue, slaEscalated };
+  }, [isPrivileged, tasks]);
+
   const visibleNotifications = useMemo(() => {
     if (notifTab === "all") return notifications;
     if (notifTab === "unread") return notifications.filter((n) => !n.is_read);
@@ -1093,10 +1107,7 @@ export default function App() {
     }
   }
 
-  async function openTaskFromNotification(notification) {
-    const taskId = notification && notification.task_id ? String(notification.task_id) : "";
-    const taskTitle = notification && notification.task_title ? String(notification.task_title) : "";
-    const taskStatus = notification && notification.task_status ? String(notification.task_status) : "";
+  async function openTaskPanel(taskId, taskTitle = "", taskStatus = "") {
     if (!taskId) return;
 
     const nextSearch = taskTitle || "";
@@ -1122,10 +1133,17 @@ export default function App() {
       const attachmentsData = await listTaskAttachments(token, taskId);
       setAttachmentsByTask((curr) => ({ ...curr, [taskId]: attachmentsData.attachments || [] }));
       setOpenCommentTaskId(taskId);
-      pushToast("Task opened from notification", "info");
+      pushToast("Task opened", "info");
     } catch (e) {
       setError(e.message);
     }
+  }
+
+  async function openTaskFromNotification(notification) {
+    const taskId = notification && notification.task_id ? String(notification.task_id) : "";
+    const taskTitle = notification && notification.task_title ? String(notification.task_title) : "";
+    const taskStatus = notification && notification.task_status ? String(notification.task_status) : "";
+    await openTaskPanel(taskId, taskTitle, taskStatus);
   }
 
   async function approveTaskFromNotification(notification) {
@@ -1443,6 +1461,48 @@ export default function App() {
         <article className="card kpi-item"><span>SLA Escalated</span><strong>{kpis.slaEscalated}</strong></article>
         <article className="card kpi-item"><span>Archived</span><strong>{kpis.archived}</strong></article>
       </section>
+
+      {isPrivileged ? (
+        <section className="card admin-inbox">
+          <div className="admin-inbox-head">
+            <h2>Admin Inbox</h2>
+            <small>Fast action queue for review and escalations</small>
+          </div>
+          <div className="admin-inbox-grid">
+            <article>
+              <h3>Pending Review ({adminInbox.reviewQueue.length})</h3>
+              {adminInbox.reviewQueue.slice(0, 5).map((task) => (
+                <div key={task.id} className="admin-inbox-item">
+                  <strong>{task.title}</strong>
+                  <small>assignee: {task.assigned_to ? memberNameById[task.assigned_to] || "Unknown" : "Unassigned"}</small>
+                  <div className="admin-inbox-actions">
+                    <button type="button" className="ghost-btn" onClick={() => openTaskPanel(task.id, task.title, task.status)}>Open</button>
+                    <button type="button" className="secondary-btn" onClick={() => onApprove(task.id)}>Approve</button>
+                    <button type="button" className="danger-btn" onClick={() => onReject(task.id)}>Reject</button>
+                  </div>
+                </div>
+              ))}
+              {adminInbox.reviewQueue.length === 0 ? <p className="section-note">No pending review tasks.</p> : null}
+            </article>
+            <article>
+              <h3>SLA Escalated ({adminInbox.slaEscalated.length})</h3>
+              {adminInbox.slaEscalated.slice(0, 5).map((task) => (
+                <div key={task.id} className="admin-inbox-item">
+                  <strong>{task.title}</strong>
+                  <small>status: {task.status}</small>
+                  <div className="admin-inbox-actions">
+                    <button type="button" className="ghost-btn" onClick={() => openTaskPanel(task.id, task.title, task.status)}>Open</button>
+                    {task.status === "done" && task.review_status === "pending" ? (
+                      <button type="button" className="secondary-btn" onClick={() => onApprove(task.id)}>Approve</button>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+              {adminInbox.slaEscalated.length === 0 ? <p className="section-note">No escalated SLA tasks.</p> : null}
+            </article>
+          </div>
+        </section>
+      ) : null}
 
       <section className="card saved-views">
         <h2>Saved Views</h2>
