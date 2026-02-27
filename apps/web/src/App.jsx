@@ -158,6 +158,14 @@ function parseQueueError(lastError) {
   };
 }
 
+function queueErrorHint(errorMeta) {
+  if (!errorMeta) return "";
+  if (errorMeta.code === "190") {
+    return "Meta token issue detected. Rotate WHATSAPP_ACCESS_TOKEN in .env.docker and restart the api service.";
+  }
+  return "";
+}
+
 function weekdayFromDateInput(dateInput) {
   const d = dateInput ? new Date(dateInput) : new Date();
   if (Number.isNaN(d.getTime())) return "mon";
@@ -1851,7 +1859,7 @@ export default function App() {
             {whatsappQueue.map((item) => {
               const errorMeta = parseQueueError(item.last_error);
               return (
-                <div key={item.id} className="queue-item">
+                <div key={item.id} className={`queue-item queue-item-${String(item.status || "pending")}`}>
                   <div className="queue-item-topline">
                     <div className="queue-item-head">
                       <span className={`queue-status queue-status-${String(item.status || "pending")}`}>{item.status || "pending"}</span>
@@ -1860,9 +1868,18 @@ export default function App() {
                     <small className="queue-created">Created {formatQueueDate(item.created_at)}</small>
                   </div>
                   <div className="queue-item-meta">
-                    <span>Attempts {item.attempts}/{item.max_attempts}</span>
-                    <span>Next {formatQueueDate(item.next_attempt_at)}</span>
-                    {item.sent_at ? <span>Sent {formatQueueDate(item.sent_at)}</span> : null}
+                    <div>
+                      <small>Attempts</small>
+                      <strong>{item.attempts}/{item.max_attempts}</strong>
+                    </div>
+                    <div>
+                      <small>Next Retry</small>
+                      <strong>{formatQueueDate(item.next_attempt_at)}</strong>
+                    </div>
+                    <div>
+                      <small>Last Sent</small>
+                      <strong>{item.sent_at ? formatQueueDate(item.sent_at) : "-"}</strong>
+                    </div>
                   </div>
                   {errorMeta ? (
                     <div className="queue-error">
@@ -1872,6 +1889,7 @@ export default function App() {
                         {errorMeta.code ? <small>Code {errorMeta.code}</small> : null}
                         {errorMeta.trace ? <small>Trace {errorMeta.trace}</small> : null}
                       </div>
+                      {queueErrorHint(errorMeta) ? <small className="queue-error-hint">{queueErrorHint(errorMeta)}</small> : null}
                     </div>
                   ) : null}
                   {item.status === "failed" ? (

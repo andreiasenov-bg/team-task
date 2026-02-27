@@ -501,7 +501,7 @@ button:active {
 .queue-list {
   margin-top: 10px;
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .queue-empty {
@@ -514,13 +514,25 @@ button:active {
 }
 
 .queue-item {
-  border: 1px solid #d2deed;
-  border-radius: 12px;
-  background: #fbfdff;
-  padding: 10px 12px;
+  border: 1px solid #c7d7ea;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+  padding: 12px;
   display: grid;
-  gap: 8px;
-  box-shadow: 0 6px 18px rgba(26, 55, 86, 0.06);
+  gap: 10px;
+  box-shadow: 0 10px 24px rgba(23, 53, 84, 0.08);
+}
+
+.queue-item-failed {
+  border-color: #e3bcc4;
+}
+
+.queue-item-pending {
+  border-color: #bbcfdf;
+}
+
+.queue-item-sent {
+  border-color: #b5d8c7;
 }
 
 .queue-item-topline {
@@ -533,7 +545,7 @@ button:active {
 .queue-created {
   margin: 0;
   color: var(--ink-3);
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.02em;
   white-space: nowrap;
 }
@@ -586,18 +598,34 @@ button:active {
 }
 
 .queue-item-meta {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
-.queue-item-meta span {
-  border: 1px solid #d0deef;
-  border-radius: 999px;
-  padding: 3px 10px;
-  font-size: 11px;
-  color: #33506f;
+.queue-item-meta div {
+  border: 1px solid #d2e0f0;
+  border-radius: 10px;
+  padding: 7px 8px;
   background: #f3f8ff;
+  display: grid;
+  gap: 2px;
+}
+
+.queue-item-meta small {
+  margin: 0;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #5a7392;
+}
+
+.queue-item-meta strong {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.2;
+  color: #1d3d5f;
+  word-break: break-word;
 }
 
 .queue-error {
@@ -633,6 +661,13 @@ button:active {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
+.queue-error-hint {
+  margin-top: 8px;
+  display: block;
+  color: #7a2f3c;
+  font-size: 12px;
+}
+
 .queue-actions {
   display: flex;
   justify-content: flex-end;
@@ -640,8 +675,8 @@ button:active {
 
 .queue-actions button {
   width: auto;
-  min-width: 170px;
-  min-height: 36px;
+  min-width: 160px;
+  min-height: 34px;
 }
 
 .assistant-item {
@@ -1448,14 +1483,33 @@ textarea {
     border-color: #2f4a67;
   }
 
+  .queue-item-failed {
+    border-color: #7b4b56;
+  }
+
+  .queue-item-pending {
+    border-color: #3f607d;
+  }
+
+  .queue-item-sent {
+    border-color: #3f765d;
+  }
+
   .queue-recipient {
     color: #e2eeff;
   }
 
-  .queue-item-meta span {
+  .queue-item-meta div {
     border-color: #365170;
-    color: #b8cde7;
     background: #20344d;
+  }
+
+  .queue-item-meta small {
+    color: #a9c1de;
+  }
+
+  .queue-item-meta strong {
+    color: #d6e8ff;
   }
 
   .queue-status {
@@ -1483,7 +1537,8 @@ textarea {
   }
 
   .queue-error p,
-  .queue-error-meta small {
+  .queue-error-meta small,
+  .queue-error-hint {
     color: #ffd4db;
   }
 
@@ -1656,6 +1711,10 @@ textarea {
   .queue-item-topline {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .queue-item-meta {
+    grid-template-columns: 1fr;
   }
 
   .queue-created {
