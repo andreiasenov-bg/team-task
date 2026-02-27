@@ -101,6 +101,22 @@ const DEFAULT_SAVED_VIEWS = [
   },
 ];
 
+const NOTIFICATION_TYPE_META = {
+  "task.done.pending_review": { severity: "warning", label: "Review Queue" },
+  "task.review.rejected": { severity: "warning", label: "Rejected" },
+  "task.review.reminder": { severity: "critical", label: "Review Reminder" },
+  "task.sla.overdue": { severity: "warning", label: "SLA Overdue" },
+  "task.sla.escalated": { severity: "critical", label: "SLA Escalated" },
+  "project.wip.limit.exceeded": { severity: "warning", label: "WIP Alert" },
+  "digest.daily.summary": { severity: "info", label: "Daily Digest" },
+};
+
+function getNotificationMeta(type) {
+  const meta = NOTIFICATION_TYPE_META[String(type || "")];
+  if (meta) return meta;
+  return { severity: "info", label: "General" };
+}
+
 function weekdayFromDateInput(dateInput) {
   const d = dateInput ? new Date(dateInput) : new Date();
   if (Number.isNaN(d.getTime())) return "mon";
@@ -446,6 +462,26 @@ export default function App() {
     }
     return notifications;
   }, [notifications, notifTab]);
+
+  const notificationSummary = useMemo(() => {
+    const unread = notifications.filter((n) => !n.is_read).length;
+    const criticalUnread = notifications.filter((n) => !n.is_read && getNotificationMeta(n.type).severity === "critical").length;
+    const reviewUnread = notifications.filter(
+      (n) => !n.is_read && ["task.done.pending_review", "task.review.reminder"].includes(n.type)
+    ).length;
+    return { unread, criticalUnread, reviewUnread };
+  }, [notifications]);
+
+  const groupedVisibleNotifications = useMemo(() => {
+    const groups = new Map();
+    for (const n of visibleNotifications) {
+      const meta = getNotificationMeta(n.type);
+      const key = `${n.type || "general"}`;
+      if (!groups.has(key)) groups.set(key, { key, type: n.type || "general", label: meta.label, severity: meta.severity, items: [] });
+      groups.get(key).items.push(n);
+    }
+    return Array.from(groups.values()).sort((a, b) => b.items.length - a.items.length);
+  }, [visibleNotifications]);
 
   async function refreshTasks(projectId = selectedProjectId, nextFilters = filters) {
     if (!token || !projectId) return;
@@ -1057,6 +1093,29 @@ export default function App() {
     }
   }
 
+  function applyNotifFocus(mode) {
+    setViewMode("board");
+    if (mode === "review_queue") {
+      setStatusFilter("done");
+      setReviewFilter("pending");
+      setDueFilter("");
+      setSlaFilter("");
+      setNotifTab("critical");
+      setShowNotifPanel(false);
+      pushToast("Opened review queue", "info");
+      return;
+    }
+    if (mode === "sla_escalated") {
+      setStatusFilter("");
+      setReviewFilter("");
+      setDueFilter("");
+      setSlaFilter("sla_escalated");
+      setNotifTab("critical");
+      setShowNotifPanel(false);
+      pushToast("Opened SLA escalations", "info");
+    }
+  }
+
   async function onCreateAssistantSkill(event) {
     event.preventDefault();
     try {
@@ -1202,6 +1261,17 @@ export default function App() {
           {showNotifPanel ? (
             <div className="notif-panel card">
               <h3>Notifications</h3>
+              <div className="notif-summary">
+                <span className="notif-pill">{notificationSummary.unread} unread</span>
+                <span className="notif-pill notif-pill-critical">{notificationSummary.criticalUnread} critical</span>
+                <span className="notif-pill notif-pill-warn">{notificationSummary.reviewUnread} review</span>
+              </div>
+              {isPrivileged ? (
+                <div className="notif-quick-actions">
+                  <button type="button" className="secondary-btn" onClick={() => applyNotifFocus("review_queue")}>Open Review Queue</button>
+                  <button type="button" className="ghost-btn" onClick={() => applyNotifFocus("sla_escalated")}>Open SLA Escalations</button>
+                </div>
+              ) : null}
               <div className="notif-tabs">
                 <button type="button" className={notifTab === "unread" ? "active" : ""} onClick={() => setNotifTab("unread")}>Unread</button>
                 <button type="button" className={notifTab === "all" ? "active" : ""} onClick={() => setNotifTab("all")}>All</button>
@@ -1265,14 +1335,22 @@ export default function App() {
                 </div>
                 <button type="button" className="secondary-btn" onClick={onSaveNotificationPreferences}>Save preferences</button>
               </div>
-              {visibleNotifications.map((n) => (
-                <div key={n.id} className={`notif-item ${n.is_read ? "" : "notif-unread"}`}>
-                  <strong>{n.title}</strong>
-                  <p>{n.message}</p>
-                  <small>{new Date(n.created_at).toLocaleString()}</small>
-                  {!n.is_read ? <button type="button" onClick={() => onReadNotification(n.id)}>Mark read</button> : null}
-                </div>
+              {groupedVisibleNotifications.map((group) => (
+                <section key={group.key} className="notif-group">
+                  <h4 className={`notif-group-title notif-group-${group.severity}`}>
+                    {group.label} ({group.items.length})
+                  </h4>
+                  {group.items.map((n) => (
+                    <div key={n.id} className={`notif-item notif-item-${getNotificationMeta(n.type).severity} ${n.is_read ? "" : "notif-unread"}`}>
+                      <strong>{n.title}</strong>
+                      <p>{n.message}</p>
+                      <small>{new Date(n.created_at).toLocaleString()}</small>
+                      {!n.is_read ? <button type="button" onClick={() => onReadNotification(n.id)}>Mark read</button> : null}
+                    </div>
+                  ))}
+                </section>
               ))}
+              {groupedVisibleNotifications.length === 0 ? <p className="section-note">No notifications in this tab.</p> : null}
             </div>
           ) : null}
         </div>
