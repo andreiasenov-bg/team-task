@@ -56,3 +56,23 @@ This command will:
 1. start compose with staging ports (`5174`, `4320`, `4310`)
 2. run QA seed data (`qa-seed` service in profile `staging`)
 3. run smoke checks against staging API and app
+
+## 6) Hetzner one-time bootstrap + deploy
+
+On your Hetzner VM (Ubuntu 22.04), from repo root:
+
+1. One-time server bootstrap (as root):
+   - `sudo APP_USER=deploy APP_DIR=/opt/team-task bash scripts/hetzner-bootstrap.sh`
+2. Switch to deploy user and first deploy:
+   - `sudo -iu deploy`
+   - `APP_DIR=/opt/team-task REPO_URL=https://github.com/andreiasenov-bg/team-task.git BRANCH=main bash /opt/team-task/scripts/prod-deploy.sh`
+3. Prepare production env:
+   - `cp /opt/team-task/.env.server.example /opt/team-task/.env.docker`
+   - edit `/opt/team-task/.env.docker` with real secrets/tokens
+4. Deploy again:
+   - `APP_DIR=/opt/team-task BRANCH=main bash /opt/team-task/scripts/prod-deploy.sh`
+
+Notes:
+- Daily DB backup cron is created automatically at `03:00` server time.
+- Backup log: `/var/log/team-task-backup.log`
+- Health check after deploy: `http://127.0.0.1:3320/api/health`
