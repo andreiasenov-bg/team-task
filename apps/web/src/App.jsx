@@ -420,6 +420,7 @@ export default function App() {
       });
     }
     if (dueFilter === "none") scoped = scoped.filter((task) => !task.due_date && !task.archived_at);
+    if (dueFilter === "review_late") scoped = scoped.filter((task) => isPendingReviewLate(task));
     if (slaFilter === "sla_overdue") scoped = scoped.filter((task) => isSlaOverdue(task));
     if (slaFilter === "sla_escalated") scoped = scoped.filter((task) => isSlaEscalated(task));
     return scoped;
@@ -963,7 +964,7 @@ export default function App() {
       setActiveQuickFilter("custom");
       setStatusFilter("done");
       setReviewFilter("pending");
-      setDueFilter("");
+      setDueFilter("review_late");
       setSlaFilter("");
       setIncludeArchived(false);
       if (!isEmployee) setAssigneeFilter("");
@@ -2037,6 +2038,7 @@ export default function App() {
         }}>
           <option value="">All due states</option>
           <option value="overdue">overdue</option>
+          <option value="review_late">review overdue 24h</option>
           <option value="today">due today</option>
           <option value="week">due in 7d</option>
           <option value="none">no due date</option>
