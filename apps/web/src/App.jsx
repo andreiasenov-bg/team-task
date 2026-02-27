@@ -1537,26 +1537,37 @@ export default function App() {
   return (
     <main className={`shell density-${density}`}>
       <header className="topbar">
-        <div>
-          <h1>{isEmployee ? "listO My Tasks" : "listO Board"}</h1>
-          <p>Signed in as {currentUser ? `${currentUser.name} (${currentUser.role})` : "loading..."}</p>
-          <small className="shortcut-hint">Shortcuts: N new task, / search, B board, C calendar</small>
+        <div className="topbar-brand">
+          <div className="logo-mark" aria-hidden="true">lO</div>
+          <div className="topbar-copy">
+            <h1>{isEmployee ? "My Tasks" : "Board Control"}</h1>
+            <div className="topbar-meta">
+              <span className="topbar-chip">{currentUser ? currentUser.role : "..."}</span>
+              <span className="topbar-chip">{projects.length} projects</span>
+            </div>
+          </div>
         </div>
         <div className="topbar-actions">
-          <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>{p.title}</option>
-            ))}
-          </select>
-          <div className="view-switch">
-            <button type="button" onClick={() => setViewMode("board")} className={viewMode === "board" ? "active" : ""}>Board</button>
-            <button type="button" onClick={() => setViewMode("calendar")} className={viewMode === "calendar" ? "active" : ""}>Calendar</button>
+          <div className="topbar-row">
+            <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.title}</option>
+              ))}
+            </select>
+            <div className="view-switch">
+              <button type="button" onClick={() => setViewMode("board")} className={viewMode === "board" ? "active" : ""}>Board</button>
+              <button type="button" onClick={() => setViewMode("calendar")} className={viewMode === "calendar" ? "active" : ""}>Calendar</button>
+            </div>
           </div>
-          <button type="button" className="ghost-btn" onClick={() => setDensity((x) => (x === "comfortable" ? "compact" : "comfortable"))}>
-            Density: {density}
-          </button>
-          <button type="button" className="ghost-btn" onClick={() => setShowNotifPanel((x) => !x)}>Notifications ({notifUnread})</button>
-          <button type="button" className="danger-btn" onClick={() => setToken("")}>Logout</button>
+          <p>Signed in as {currentUser ? `${currentUser.name} (${currentUser.role})` : "loading..."}</p>
+          <small className="shortcut-hint">Shortcuts: N new task, / search, B board, C calendar</small>
+          <div className="topbar-row topbar-row-cta">
+            <button type="button" className="ghost-btn" onClick={() => setDensity((x) => (x === "comfortable" ? "compact" : "comfortable"))}>
+              Density: {density}
+            </button>
+            <button type="button" className="ghost-btn" onClick={() => setShowNotifPanel((x) => !x)}>Notifications ({notifUnread})</button>
+            <button type="button" className="danger-btn" onClick={() => setToken("")}>Logout</button>
+          </div>
           {showNotifPanel ? (
             <div className="notif-panel card">
               <h3>Notifications</h3>
