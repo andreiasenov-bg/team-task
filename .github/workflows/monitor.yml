@@ -1,0 +1,17 @@
+name: Monitor
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+jobs:
+  healthcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call health endpoint
+        run: |
+          set -e
+          test -n "${{ secrets.APP_HEALTH_URL }}"
+          curl --fail --show-error --silent "${{ secrets.APP_HEALTH_URL }}" > /tmp/health.json
+          cat /tmp/health.json

@@ -1,0 +1,22 @@
+{
+  "name": "@team-task/api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Nexus Flow API (Express + PostgreSQL + JWT + RBAC)",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node src/server.js",
+    "start": "NODE_ENV=production node src/server.js",
+    "seed": "node src/scripts/seed.js",
+    "seed:qa": "node src/scripts/seedQa.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.12.0",
+    "socket.io": "^4.8.1",
+    "swagger-ui-express": "^5.0.1"
+  }
+}

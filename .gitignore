@@ -1,2 +1,7 @@
 data.json
 .env
+.env.docker
+data/
+node_modules/
+apps/api/.env
+apps/api/node_modules/

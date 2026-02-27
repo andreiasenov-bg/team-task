@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nexus Flow Monitor</title>
+    <style>
+      body { font-family: "Segoe UI", sans-serif; margin: 24px; background: #f7f7f8; color: #111; }
+      h1 { margin: 0 0 16px; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      .card { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 16px; }
+      label { display: block; margin: 10px 0 6px; font-size: 14px; }
+      input { width: 100%; box-sizing: border-box; padding: 10px; }
+      button { margin-top: 12px; padding: 10px 12px; cursor: pointer; }
+      pre { white-space: pre-wrap; word-break: break-word; background: #101114; color: #d8d8d8; padding: 12px; border-radius: 8px; min-height: 120px; }
+      .ok { color: #0a7a2a; font-weight: 700; }
+      .err { color: #a81717; font-weight: 700; }
+      @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <h1>Nexus Flow Monitor</h1>
+    <div class="grid">
+      <div class="card">
+        <h2>Endpoints</h2>
+        <div>
+          <button id="checkOld">Check old app health (3310)</button>
+          <button id="checkNew">Check new API health (3320)</button>
+          <p id="status"></p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>New API Login</h2>
+        <label for="email">Email</label>
+        <input id="email" value="admin@nexus-flow.local" />
+        <label for="password">Password</label>
+        <input id="password" value="admin123" />
+        <button id="login">Login</button>
+      </div>
+
+      <div class="card">
+        <h2>Projects</h2>
+        <button id="loadProjects">Load projects</button>
+        <pre id="projectsOut"></pre>
+      </div>
+
+      <div class="card">
+        <h2>Tasks</h2>
+        <label for="projectId">Project ID</label>
+        <input id="projectId" placeholder="Paste project id here" />
+        <button id="loadTasks">Load tasks</button>
+        <pre id="tasksOut"></pre>
+      </div>
+    </div>
+
+    <script>
+      const oldHealthUrl = "http://127.0.0.1:3310/api/health";
+      const newApiBase = "http://127.0.0.1:3320/api";
+      let token = "";
+
+      const statusEl = document.getElementById("status");
+      const projectsOut = document.getElementById("projectsOut");
+      const tasksOut = document.getElementById("tasksOut");
+
+      function setStatus(text, ok) {
+        statusEl.textContent = text;
+        statusEl.className = ok ? "ok" : "err";
+      }
+
+      async function callJson(url, options = {}) {
+        const res = await fetch(url, options);
+        const text = await res.text();
+        let body = text;
+        try { body = JSON.parse(text); } catch {}
+        if (!res.ok) throw new Error(typeof body === "string" ? body : JSON.stringify(body));
+        return body;
+      }
+
+      document.getElementById("checkOld").onclick = async () => {
+        try {
+          const data = await callJson(oldHealthUrl);
+          setStatus("Old app is up: " + (data.ok ? "ok" : "not ok"), true);
+        } catch (e) {
+          setStatus("Old app check failed: " + e.message, false);
+        }
+      };
+
+      document.getElementById("checkNew").onclick = async () => {
+        try {
+          const data = await callJson(newApiBase + "/health");
+          setStatus("New API is up: " + (data.ok ? "ok" : "not ok"), true);
+        } catch (e) {
+          setStatus("New API check failed: " + e.message, false);
+        }
+      };
+
+      document.getElementById("login").onclick = async () => {
+        try {
+          const email = document.getElementById("email").value.trim();
+          const password = document.getElementById("password").value;
+          const data = await callJson(newApiBase + "/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email, password })
+          });
+          token = data.token;
+          setStatus("Login OK for " + data.user.email, true);
+        } catch (e) {
+          setStatus("Login failed: " + e.message, false);
+        }
+      };
+
+      document.getElementById("loadProjects").onclick = async () => {
+        try {
+          const data = await callJson(newApiBase + "/projects", {
+            headers: { Authorization: "Bearer " + token }
+          });
+          projectsOut.textContent = JSON.stringify(data, null, 2);
+          if (data.projects && data.projects[0]) {
+            document.getElementById("projectId").value = data.projects[0].id;
+          }
+        } catch (e) {
+          projectsOut.textContent = "Error: " + e.message;
+        }
+      };
+
+      document.getElementById("loadTasks").onclick = async () => {
+        try {
+          const projectId = document.getElementById("projectId").value.trim();
+          const data = await callJson(newApiBase + "/tasks?projectId=" + encodeURIComponent(projectId), {
+            headers: { Authorization: "Bearer " + token }
+          });
+          tasksOut.textContent = JSON.stringify(data, null, 2);
+        } catch (e) {
+          tasksOut.textContent = "Error: " + e.message;
+        }
+      };
+    </script>
+  </body>
+  </html>

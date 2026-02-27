@@ -25,6 +25,7 @@ const els = {
   pageTitle: document.getElementById("pageTitle"),
   pageSubtitle: document.getElementById("pageSubtitle"),
   pageActions: document.getElementById("pageActions"),
+  reloadDataBtn: document.getElementById("reloadDataBtn"),
   healthBadge: document.getElementById("healthBadge"),
   navItems: Array.from(document.querySelectorAll(".nav-item[data-route]")),
 
@@ -197,6 +198,7 @@ function bindEvents() {
     state.boardView = state.boardView === "kanban" ? "table" : "kanban";
     renderShell();
   });
+  els.reloadDataBtn.addEventListener("click", reloadAllData);
 
   // People
   els.addUserBtn.addEventListener("click", onAddUser);
@@ -294,14 +296,17 @@ async function restoreSession() {
 
 async function bootstrapApp() {
   showApp();
+  await reloadAllData();
+  startNotifPolling();
+  renderShell();
+}
+
+async function reloadAllData() {
   await loadHealth();
   await loadUsers();
   await loadTasks();
   await loadNotifications();
-  startNotifPolling();
-  if (isManager()) {
-    await loadAudit();
-  }
+  if (isManager()) await loadAudit();
   renderShell();
 }
 
@@ -485,7 +490,7 @@ function renderHealthBadge() {
     els.healthBadge.textContent = "API: unknown";
     return;
   }
-  els.healthBadge.textContent = `API v${state.health.version} | data: ${state.health.counts.tasks} tasks`;
+  els.healthBadge.textContent = `API v${state.health.version} | tasks: ${state.health.counts.tasks} | audit: ${state.health.counts.audit}`;
 }
 
 function renderBoardRoute() {

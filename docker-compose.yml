@@ -1,0 +1,94 @@
+services:
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: team-task-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    depends_on:
+      api:
+        condition: service_started
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: team-task-api
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 3320
+      JWT_SECRET: change-me-in-production
+      JWT_EXPIRES_IN: 12h
+      DATABASE_URL: postgresql://teamtask:teamtask@postgres:5432/teamtask
+    ports:
+      - "${API_PORT:-3320}:3320"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: team-task-app
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3310
+      DATA_FILE: /app/data/data.json
+      # Future migration target (not used by current server.js yet)
+      DATABASE_URL: postgresql://teamtask:teamtask@postgres:5432/teamtask
+    ports:
+      - "${APP_PORT:-3310}:3310"
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: team-task-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: teamtask
+      POSTGRES_USER: teamtask
+      POSTGRES_PASSWORD: teamtask
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U teamtask -d teamtask"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  qa-seed:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: team-task-qa-seed
+    profiles:
+      - staging
+    env_file:
+      - .env.docker
+    environment:
+      DATABASE_URL: postgresql://teamtask:teamtask@postgres:5432/teamtask
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+    command: >
+      sh -lc "node src/scripts/seed.js && node src/scripts/seedQa.js"
+
+volumes:
+  postgres_data:
