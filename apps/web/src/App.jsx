@@ -1093,6 +1093,68 @@ export default function App() {
     }
   }
 
+  async function openTaskFromNotification(notification) {
+    const taskId = notification && notification.task_id ? String(notification.task_id) : "";
+    const taskTitle = notification && notification.task_title ? String(notification.task_title) : "";
+    const taskStatus = notification && notification.task_status ? String(notification.task_status) : "";
+    if (!taskId) return;
+
+    const nextSearch = taskTitle || "";
+    const nextStatus = ["todo", "in_progress", "done"].includes(taskStatus) ? taskStatus : "";
+    setViewMode("board");
+    setSearch(nextSearch);
+    setStatusFilter(nextStatus);
+    setReviewFilter("");
+    setDueFilter("");
+    setSlaFilter("");
+    setShowNotifPanel(false);
+
+    try {
+      await refreshTasks(selectedProjectId, {
+        search: nextSearch,
+        status: nextStatus,
+        review: "",
+        assigneeId: currentUser && currentUser.role === "employee" ? currentUser.id : assigneeFilter,
+        includeArchived,
+      });
+      const commentsData = await listTaskComments(token, taskId);
+      setCommentsByTask((curr) => ({ ...curr, [taskId]: commentsData.comments || [] }));
+      const attachmentsData = await listTaskAttachments(token, taskId);
+      setAttachmentsByTask((curr) => ({ ...curr, [taskId]: attachmentsData.attachments || [] }));
+      setOpenCommentTaskId(taskId);
+      pushToast("Task opened from notification", "info");
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function approveTaskFromNotification(notification) {
+    const taskId = notification && notification.task_id ? String(notification.task_id) : "";
+    if (!taskId || !isPrivileged) return;
+    try {
+      await reviewTask(token, taskId, "approve", "");
+      await onReadNotification(notification.id);
+      await refreshTasks();
+      pushToast("Task approved", "info");
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function rejectTaskFromNotification(notification) {
+    const taskId = notification && notification.task_id ? String(notification.task_id) : "";
+    if (!taskId || !isPrivileged) return;
+    const comment = window.prompt("Comment for rejection (optional)", "") || "";
+    try {
+      await reviewTask(token, taskId, "reject", comment);
+      await onReadNotification(notification.id);
+      await refreshTasks();
+      pushToast("Task rejected", "info");
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
   function applyNotifFocus(mode) {
     setViewMode("board");
     if (mode === "review_queue") {
@@ -1345,7 +1407,24 @@ export default function App() {
                       <strong>{n.title}</strong>
                       <p>{n.message}</p>
                       <small>{new Date(n.created_at).toLocaleString()}</small>
-                      {!n.is_read ? <button type="button" onClick={() => onReadNotification(n.id)}>Mark read</button> : null}
+                      <div className="notif-item-actions">
+                        {n.task_id ? (
+                          <button type="button" className="ghost-btn" onClick={() => openTaskFromNotification(n)}>
+                            Open task
+                          </button>
+                        ) : null}
+                        {isPrivileged && n.task_id && ["task.done.pending_review", "task.review.reminder"].includes(n.type) ? (
+                          <>
+                            <button type="button" className="secondary-btn" onClick={() => approveTaskFromNotification(n)}>
+                              Approve
+                            </button>
+                            <button type="button" className="danger-btn" onClick={() => rejectTaskFromNotification(n)}>
+                              Reject
+                            </button>
+                          </>
+                        ) : null}
+                        {!n.is_read ? <button type="button" onClick={() => onReadNotification(n.id)}>Mark read</button> : null}
+                      </div>
                     </div>
                   ))}
                 </section>
