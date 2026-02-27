@@ -460,21 +460,166 @@ button:active {
 
 .queue-toolbar {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-  margin-bottom: 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .queue-metrics {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 10px;
+}
+
+.queue-metric-card {
+  margin-top: 0;
+  border: 1px solid #cfdced;
+  border-radius: 12px;
+  padding: 12px;
+  background: linear-gradient(180deg, #f6faff, #eef5fd);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.queue-metric-card small {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.queue-metric-card strong {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--ink-1);
 }
 
 .queue-list {
   margin-top: 10px;
   display: grid;
+  gap: 10px;
+}
+
+.queue-empty {
+  margin: 0;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px dashed #cad8ea;
+  background: #f8fbff;
+  color: var(--ink-3);
+}
+
+.queue-item {
+  border: 1px solid #d2deed;
+  border-radius: 12px;
+  background: #fbfdff;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.queue-item-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.queue-recipient {
+  font-size: 18px;
+  line-height: 1.2;
+  color: var(--ink-1);
+  overflow-wrap: anywhere;
+}
+
+.queue-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  border: 1px solid #9eb6d4;
+  color: #2f4f73;
+  background: #e8f1ff;
+}
+
+.queue-status-pending {
+  border-color: #6f8faa;
+  color: #25415c;
+  background: #ddeaf9;
+}
+
+.queue-status-sent {
+  border-color: #49926e;
+  color: #1b633f;
+  background: #ddf3e8;
+}
+
+.queue-status-failed {
+  border-color: #c36c78;
+  color: #8e2b3a;
+  background: #fde7eb;
+}
+
+.queue-item-meta {
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.queue-item-meta span {
+  border: 1px solid #d0deef;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: #33506f;
+  background: #f3f8ff;
+}
+
+.queue-error {
+  border: 1px solid #e4c7cc;
+  border-left: 4px solid #c46d7a;
+  border-radius: 10px;
+  background: #fff6f7;
+  padding: 10px;
+}
+
+.queue-error p {
+  margin: 0;
+  font-size: 13px;
+  color: #7b2431;
+  word-break: break-word;
+}
+
+.queue-error-meta {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.queue-error-meta small {
+  margin: 0;
+  border: 1px solid #e8cfd3;
+  border-radius: 999px;
+  padding: 2px 8px;
+  color: #8a3a49;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.queue-actions {
+  max-width: 240px;
+}
+
+.queue-actions button {
+  width: 100%;
 }
 
 .assistant-item {
@@ -1262,6 +1407,69 @@ textarea {
     border-color: #304763;
   }
 
+  .queue-metric-card {
+    background: linear-gradient(180deg, #203850, #1a2e45);
+    border-color: #33526f;
+  }
+
+  .queue-metric-card strong {
+    color: #d7e8ff;
+  }
+
+  .queue-metric-card small {
+    color: #adc5e4;
+  }
+
+  .queue-empty,
+  .queue-item {
+    background: #17283f;
+    border-color: #2f4a67;
+  }
+
+  .queue-recipient {
+    color: #e2eeff;
+  }
+
+  .queue-item-meta span {
+    border-color: #365170;
+    color: #b8cde7;
+    background: #20344d;
+  }
+
+  .queue-status {
+    border-color: #4a6a8c;
+    color: #c9defa;
+    background: #24435f;
+  }
+
+  .queue-status-sent {
+    border-color: #3f7b5e;
+    color: #c4efd8;
+    background: #1f4636;
+  }
+
+  .queue-status-failed {
+    border-color: #8a4a55;
+    color: #ffd8de;
+    background: #4a2830;
+  }
+
+  .queue-error {
+    border-color: #7f4f58;
+    border-left-color: #b46371;
+    background: #3a2228;
+  }
+
+  .queue-error p,
+  .queue-error-meta small {
+    color: #ffd4db;
+  }
+
+  .queue-error-meta small {
+    border-color: #915866;
+    background: #44272e;
+  }
+
   .notif-prefs {
     background: #233947;
     border-color: #426176;
@@ -1415,6 +1623,12 @@ textarea {
 
   .queue-toolbar {
     grid-template-columns: 1fr;
+  }
+
+  .queue-item-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .calendar-event {

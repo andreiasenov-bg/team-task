@@ -126,6 +126,38 @@ function getNotificationMeta(type) {
   return { severity: "info", label: "General" };
 }
 
+function formatQueueDate(value) {
+  if (!value) return "-";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleString();
+}
+
+function parseQueueError(lastError) {
+  if (!lastError) return null;
+  let source = lastError;
+  if (typeof source === "string") {
+    const raw = source.trim();
+    if (!raw) return null;
+    try {
+      source = JSON.parse(raw);
+    } catch {
+      return { message: raw, code: "", type: "", trace: "" };
+    }
+  }
+  if (typeof source !== "object") {
+    return { message: String(source), code: "", type: "", trace: "" };
+  }
+  const nested = source && typeof source.error === "object" ? source.error : source;
+  const message = nested && nested.message ? String(nested.message) : String(source.message || "Unknown error");
+  return {
+    message,
+    code: nested && nested.code != null ? String(nested.code) : "",
+    type: nested && nested.type ? String(nested.type) : "",
+    trace: nested && nested.fbtrace_id ? String(nested.fbtrace_id) : "",
+  };
+}
+
 function weekdayFromDateInput(dateInput) {
   const d = dateInput ? new Date(dateInput) : new Date();
   if (Number.isNaN(d.getTime())) return "mon";
@@ -1801,34 +1833,52 @@ export default function App() {
             </button>
           </div>
           <div className="queue-metrics">
-            <article className="assistant-item">
-              <strong>Pending</strong>
-              <small>{whatsappMetrics && whatsappMetrics.outboundQueue ? whatsappMetrics.outboundQueue.pending_count : 0}</small>
+            <article className="queue-metric-card">
+              <small>Pending</small>
+              <strong>{whatsappMetrics && whatsappMetrics.outboundQueue ? whatsappMetrics.outboundQueue.pending_count : 0}</strong>
             </article>
-            <article className="assistant-item">
-              <strong>Failed</strong>
-              <small>{whatsappMetrics && whatsappMetrics.outboundQueue ? whatsappMetrics.outboundQueue.failed_count : 0}</small>
+            <article className="queue-metric-card">
+              <small>Failed</small>
+              <strong>{whatsappMetrics && whatsappMetrics.outboundQueue ? whatsappMetrics.outboundQueue.failed_count : 0}</strong>
             </article>
-            <article className="assistant-item">
-              <strong>Sent</strong>
-              <small>{whatsappMetrics && whatsappMetrics.outboundQueue ? whatsappMetrics.outboundQueue.sent_count : 0}</small>
+            <article className="queue-metric-card">
+              <small>Sent</small>
+              <strong>{whatsappMetrics && whatsappMetrics.outboundQueue ? whatsappMetrics.outboundQueue.sent_count : 0}</strong>
             </article>
           </div>
           <div className="queue-list">
-            {whatsappQueue.length === 0 ? <p>No queue messages for this filter.</p> : null}
-            {whatsappQueue.map((item) => (
-              <div key={item.id} className="assistant-item">
-                <strong>{item.status} • {item.recipient}</strong>
-                <small>Attempts: {item.attempts}/{item.max_attempts}</small>
-                <small>Next: {item.next_attempt_at ? new Date(item.next_attempt_at).toLocaleString() : "-"}</small>
-                {item.last_error ? <small>Error: {String(item.last_error).slice(0, 180)}</small> : null}
+            {whatsappQueue.length === 0 ? <p className="queue-empty">No queue messages for this filter.</p> : null}
+            {whatsappQueue.map((item) => {
+              const errorMeta = parseQueueError(item.last_error);
+              return (
+                <div key={item.id} className="queue-item">
+                  <div className="queue-item-head">
+                    <span className={`queue-status queue-status-${String(item.status || "pending")}`}>{item.status || "pending"}</span>
+                    <strong className="queue-recipient">{item.recipient || "Unknown recipient"}</strong>
+                  </div>
+                  <div className="queue-item-meta">
+                    <span>Attempts {item.attempts}/{item.max_attempts}</span>
+                    <span>Next {formatQueueDate(item.next_attempt_at)}</span>
+                    {item.sent_at ? <span>Sent {formatQueueDate(item.sent_at)}</span> : null}
+                  </div>
+                  {errorMeta ? (
+                    <div className="queue-error">
+                      <p>{errorMeta.message}</p>
+                      <div className="queue-error-meta">
+                        {errorMeta.type ? <small>Type {errorMeta.type}</small> : null}
+                        {errorMeta.code ? <small>Code {errorMeta.code}</small> : null}
+                        {errorMeta.trace ? <small>Trace {errorMeta.trace}</small> : null}
+                      </div>
+                    </div>
+                  ) : null}
                 {item.status === "failed" ? (
-                  <div className="assistant-item-actions">
+                  <div className="queue-actions">
                     <button type="button" className="secondary-btn" onClick={() => onRequeueWhatsapp(item.id)}>Requeue now</button>
                   </div>
                 ) : null}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         </section>
       ) : null}
