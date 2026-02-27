@@ -156,6 +156,25 @@ const spec = {
         responses: { 201: { description: "Comment created" } },
       },
     },
+    "/api/tasks/{taskId}/attachments": {
+      get: {
+        summary: "List task attachments",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Attachments list" } },
+      },
+      post: {
+        summary: "Attach file (base64) or URL to task",
+        security: [{ bearerAuth: [] }],
+        responses: { 201: { description: "Attachment created" } },
+      },
+    },
+    "/api/tasks/{taskId}/attachments/{attachmentId}": {
+      delete: {
+        summary: "Delete task attachment",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Attachment removed" } },
+      },
+    },
     "/api/tasks/{taskId}/review": {
       patch: {
         summary: "Approve or reject completed task (admin/manager)",

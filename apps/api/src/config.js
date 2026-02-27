@@ -6,6 +6,7 @@ dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 const config = {
   host: process.env.API_HOST || "127.0.0.1",
   port: Number(process.env.API_PORT || 3320),
+  publicBaseUrl: process.env.PUBLIC_BASE_URL || "http://127.0.0.1:3320",
   jwtSecret: process.env.JWT_SECRET || "change-me",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "12h",
   databaseUrl: process.env.DATABASE_URL || "postgresql://teamtask:teamtask@127.0.0.1:5432/teamtask",

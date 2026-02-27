@@ -9,6 +9,7 @@ This folder contains the new backend baseline for the API + SPA migration.
 - RBAC model (`admin`, `manager`, `employee`).
 - Project APIs (`GET /api/projects`, `POST /api/projects`).
 - Task APIs (`GET /api/tasks?projectId=...`, `POST /api/tasks`, `PATCH /api/tasks/:taskId/status`).
+- Task comments and attachments APIs (`/api/tasks/:taskId/comments`, `/api/tasks/:taskId/attachments`) with URL or base64 file upload (max 8MB).
 - Activity log writes on project/task changes.
 
 ## Run locally

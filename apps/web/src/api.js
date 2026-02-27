@@ -130,6 +130,30 @@ export async function addTaskComment(token, taskId, content) {
   });
 }
 
+export async function listTaskAttachments(token, taskId) {
+  return call(`/tasks/${encodeURIComponent(taskId)}/attachments`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
+export async function addTaskAttachment(token, taskId, payload) {
+  return call(`/tasks/${encodeURIComponent(taskId)}/attachments`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteTaskAttachment(token, taskId, attachmentId) {
+  return call(`/tasks/${encodeURIComponent(taskId)}/attachments/${encodeURIComponent(attachmentId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 export async function health() {
   return call("/health");
 }

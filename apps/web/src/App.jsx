@@ -12,10 +12,12 @@ import {
 import { io } from "socket.io-client";
 import {
   addTaskComment,
+  addTaskAttachment,
   archiveTask,
   createAssistantSkill,
   clearReadNotifications,
   createTask,
+  deleteTaskAttachment,
   decideAssistantSkillApproval,
   downloadCalendarIcs,
   getNotificationPreferences,
@@ -30,6 +32,7 @@ import {
   listNotifications,
   listProjectMembers,
   listProjects,
+  listTaskAttachments,
   listTaskComments,
   listTasks,
   login,
@@ -199,6 +202,15 @@ function useLocalStorage(key, initialValue) {
   return [value, setValue];
 }
 
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : "");
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
+
 function getMonthRange(offset = 0) {
   const now = new Date();
   const base = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + offset, 1));
@@ -227,6 +239,8 @@ export default function App() {
   const [openCommentTaskId, setOpenCommentTaskId] = useState("");
   const [commentsByTask, setCommentsByTask] = useState({});
   const [commentDraftByTask, setCommentDraftByTask] = useState({});
+  const [attachmentsByTask, setAttachmentsByTask] = useState({});
+  const [attachmentDraftByTask, setAttachmentDraftByTask] = useState({});
 
   const [notifications, setNotifications] = useState([]);
   const [notifUnread, setNotifUnread] = useState(0);
@@ -626,6 +640,19 @@ export default function App() {
       setCommentsByTask((curr) => ({ ...curr, [taskId]: [...(curr[taskId] || []), comment] }));
       onEvent();
     });
+    socket.on("task.attachment.added", ({ taskId, attachment }) => {
+      if (!taskId || !attachment) return;
+      setAttachmentsByTask((curr) => ({ ...curr, [taskId]: [...(curr[taskId] || []), attachment] }));
+      onEvent();
+    });
+    socket.on("task.attachment.removed", ({ taskId, attachmentId }) => {
+      if (!taskId || !attachmentId) return;
+      setAttachmentsByTask((curr) => ({
+        ...curr,
+        [taskId]: (curr[taskId] || []).filter((x) => x.id !== attachmentId),
+      }));
+      onEvent();
+    });
 
     return () => {
       socket.disconnect();
@@ -892,10 +919,15 @@ export default function App() {
   async function toggleComments(taskId) {
     if (openCommentTaskId === taskId) return setOpenCommentTaskId("");
     setOpenCommentTaskId(taskId);
-    if (commentsByTask[taskId]) return;
     try {
-      const data = await listTaskComments(token, taskId);
-      setCommentsByTask((curr) => ({ ...curr, [taskId]: data.comments || [] }));
+      if (!commentsByTask[taskId]) {
+        const commentsData = await listTaskComments(token, taskId);
+        setCommentsByTask((curr) => ({ ...curr, [taskId]: commentsData.comments || [] }));
+      }
+      if (!attachmentsByTask[taskId]) {
+        const attachmentsData = await listTaskAttachments(token, taskId);
+        setAttachmentsByTask((curr) => ({ ...curr, [taskId]: attachmentsData.attachments || [] }));
+      }
     } catch (e) {
       setError(e.message);
     }
@@ -908,6 +940,46 @@ export default function App() {
       const data = await addTaskComment(token, taskId, draft);
       setCommentsByTask((curr) => ({ ...curr, [taskId]: [...(curr[taskId] || []), data.comment] }));
       setCommentDraftByTask((curr) => ({ ...curr, [taskId]: "" }));
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function submitAttachment(taskId) {
+    const draft = attachmentDraftByTask[taskId] || { fileName: "", fileUrl: "", fileObject: null };
+    const fileUrl = String(draft.fileUrl || "").trim();
+    const fileName = String(draft.fileName || "").trim();
+    const fileObject = draft.fileObject || null;
+    if (!fileUrl && !fileObject) return;
+    try {
+      let payload = { fileName, fileUrl };
+      if (fileObject) {
+        const fileDataBase64 = await fileToBase64(fileObject);
+        payload = {
+          fileName,
+          fileDataBase64,
+          originalFileName: fileObject.name,
+          mimeType: fileObject.type || "",
+          sizeBytes: fileObject.size || null,
+        };
+      }
+      const data = await addTaskAttachment(token, taskId, payload);
+      setAttachmentsByTask((curr) => ({ ...curr, [taskId]: [...(curr[taskId] || []), data.attachment] }));
+      setAttachmentDraftByTask((curr) => ({ ...curr, [taskId]: { fileName: "", fileUrl: "", fileObject: null } }));
+      pushToast("Attachment added", "info");
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function removeAttachment(taskId, attachmentId) {
+    try {
+      await deleteTaskAttachment(token, taskId, attachmentId);
+      setAttachmentsByTask((curr) => ({
+        ...curr,
+        [taskId]: (curr[taskId] || []).filter((x) => x.id !== attachmentId),
+      }));
+      pushToast("Attachment removed", "info");
     } catch (e) {
       setError(e.message);
     }
@@ -1697,10 +1769,15 @@ export default function App() {
                 memberNameById={memberNameById}
                 openCommentTaskId={openCommentTaskId}
                 commentsByTask={commentsByTask}
+                attachmentsByTask={attachmentsByTask}
                 commentDraftByTask={commentDraftByTask}
+                attachmentDraftByTask={attachmentDraftByTask}
                 setCommentDraftByTask={setCommentDraftByTask}
+                setAttachmentDraftByTask={setAttachmentDraftByTask}
                 toggleComments={toggleComments}
                 submitComment={submitComment}
+                submitAttachment={submitAttachment}
+                removeAttachment={removeAttachment}
               />
             ))}
           </section>
@@ -1718,10 +1795,15 @@ export default function App() {
                 memberNameById={memberNameById}
                 isCommentsOpen={false}
                 comments={[]}
+                attachments={[]}
                 draft={""}
+                attachmentDraft={{ fileName: "", fileUrl: "", fileObject: null }}
                 onDraftChange={() => {}}
+                onAttachmentDraftChange={() => {}}
                 onToggleComments={() => {}}
                 onSubmitComment={() => {}}
+                onSubmitAttachment={() => {}}
+                onRemoveAttachment={() => {}}
               />
             ) : null}
           </DragOverlay>
@@ -1821,10 +1903,15 @@ function KanbanColumn({
   memberNameById,
   openCommentTaskId,
   commentsByTask,
+  attachmentsByTask,
   commentDraftByTask,
+  attachmentDraftByTask,
   setCommentDraftByTask,
+  setAttachmentDraftByTask,
   toggleComments,
   submitComment,
+  submitAttachment,
+  removeAttachment,
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: `col:${statusKey}` });
   return (
@@ -1844,10 +1931,17 @@ function KanbanColumn({
             memberNameById={memberNameById}
             isCommentsOpen={openCommentTaskId === task.id}
             comments={commentsByTask[task.id] || []}
+            attachments={attachmentsByTask[task.id] || []}
             draft={commentDraftByTask[task.id] || ""}
+            attachmentDraft={attachmentDraftByTask[task.id] || { fileName: "", fileUrl: "", fileObject: null }}
             onDraftChange={(value) => setCommentDraftByTask((curr) => ({ ...curr, [task.id]: value }))}
+            onAttachmentDraftChange={(value) =>
+              setAttachmentDraftByTask((curr) => ({ ...curr, [task.id]: { ...(curr[task.id] || {}), ...value } }))
+            }
             onToggleComments={() => toggleComments(task.id)}
             onSubmitComment={() => submitComment(task.id)}
+            onSubmitAttachment={() => submitAttachment(task.id)}
+            onRemoveAttachment={(attachmentId) => removeAttachment(task.id, attachmentId)}
           />
         ))}
       </div>
@@ -1867,10 +1961,15 @@ function TaskCard({
   memberNameById = {},
   isCommentsOpen,
   comments,
+  attachments,
   draft,
+  attachmentDraft,
   onDraftChange,
+  onAttachmentDraftChange,
   onToggleComments,
   onSubmitComment,
+  onSubmitAttachment,
+  onRemoveAttachment,
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `task:${task.id}` });
   const style = {
@@ -1939,6 +2038,38 @@ function TaskCard({
           </div>
           <textarea placeholder={task.status === "done" ? "Опиши какво е свършено..." : "Добави коментар..."} value={draft} onChange={(e) => onDraftChange(e.target.value)} />
           <button type="button" onClick={onSubmitComment}>Post comment</button>
+
+          <h4>Attachments</h4>
+          <div className="attachment-list">
+            {attachments.map((attachment) => (
+              <div className="attachment-item" key={attachment.id}>
+                <a href={attachment.file_url} target="_blank" rel="noreferrer">{attachment.file_name}</a>
+                <button type="button" className="task-btn task-btn-muted" onClick={() => onRemoveAttachment(attachment.id)}>Remove</button>
+              </div>
+            ))}
+            {attachments.length === 0 ? <p>No attachments yet.</p> : null}
+          </div>
+          <div className="attachment-form">
+            <input
+              placeholder="File name (optional)"
+              value={attachmentDraft.fileName || ""}
+              onChange={(e) => onAttachmentDraftChange({ fileName: e.target.value })}
+            />
+            <input
+              type="file"
+              onChange={(e) => {
+                const nextFile = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+                onAttachmentDraftChange({ fileObject: nextFile });
+              }}
+            />
+            <input
+              placeholder="https://file-url (optional)"
+              value={attachmentDraft.fileUrl || ""}
+              onChange={(e) => onAttachmentDraftChange({ fileUrl: e.target.value })}
+            />
+            <button type="button" onClick={onSubmitAttachment}>Attach</button>
+          </div>
+          {attachmentDraft.fileObject ? <small>Selected file: {attachmentDraft.fileObject.name}</small> : null}
         </div>
       ) : null}
     </div>

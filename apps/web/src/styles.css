@@ -665,6 +665,37 @@ button:active {
   margin: 0;
 }
 
+.attachment-list {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.attachment-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #e3e9f4;
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: #fff;
+}
+
+.attachment-item a {
+  color: #1d4f8d;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-form {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
 textarea {
   width: 100%;
   min-height: 72px;
@@ -1021,6 +1052,7 @@ textarea {
   .topbar,
   .task,
   .comment-item,
+  .attachment-item,
   .notif-item,
   .calendar-event,
   .activity-item,
@@ -1044,6 +1076,10 @@ textarea {
   .task p,
   .notif-item p {
     color: #bfd1ef;
+  }
+
+  .attachment-item a {
+    color: #9ec5ff;
   }
 
   .assistant-item {

@@ -1,4 +1,7 @@
 const express = require("express");
+const fs = require("fs");
+const path = require("path");
+const { randomUUID } = require("crypto");
 const { query } = require("../db");
 const config = require("../config");
 const { badRequest, forbidden, notFound } = require("../errors");
@@ -25,6 +28,51 @@ const TASK_FIELDS_SELECT = `
   t.archived_at, t.archived_by, t.created_at, t.updated_at
 `;
 const WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
+
+function sanitizeFileName(value, fallback = "attachment") {
+  const raw = String(value || "").trim();
+  const base = path.basename(raw || fallback);
+  const safe = base.replace(/[^a-zA-Z0-9._-]/g, "_");
+  return (safe || fallback).slice(0, 180);
+}
+
+function decodeBase64Payload(payload) {
+  const raw = String(payload || "").trim();
+  if (!raw) throw badRequest("fileDataBase64 is required");
+  const match = raw.match(/^data:([^;]+);base64,(.+)$/i);
+  const mimeType = match ? match[1] : "";
+  const base64Data = match ? match[2] : raw;
+  if (!/^[a-zA-Z0-9+/=]+$/.test(base64Data)) throw badRequest("invalid base64 payload");
+  const buffer = Buffer.from(base64Data, "base64");
+  if (!buffer.length) throw badRequest("empty attachment payload");
+  if (buffer.length > MAX_ATTACHMENT_BYTES) {
+    throw badRequest(`attachment too large (max ${MAX_ATTACHMENT_BYTES} bytes)`);
+  }
+  return { buffer, mimeType: mimeType.slice(0, 120) };
+}
+
+function maybeDeleteLocalAttachment(fileUrl) {
+  const parsed = new URL(fileUrl, config.publicBaseUrl);
+  if (!parsed.pathname.startsWith("/uploads/")) return;
+  const fileName = path.basename(parsed.pathname);
+  if (!fileName) return;
+  const abs = path.join(UPLOADS_DIR, fileName);
+  try {
+    fs.unlinkSync(abs);
+  } catch {
+    // Ignore missing/unlink errors for already-removed files.
+  }
+}
+
+function resolveRequestOrigin(req) {
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim();
+  const proto = forwardedProto || req.protocol || "http";
+  const host = String(req.headers.host || "").trim();
+  if (host) return `${proto}://${host}`;
+  return String(config.publicBaseUrl || "").replace(/\/$/, "");
+}
 
 async function canAccessProject(user, projectId) {
   if (user.role === "admin" || user.role === "manager") return true;
@@ -33,6 +81,11 @@ async function canAccessProject(user, projectId) {
     [projectId, user.sub]
   );
   return membership.rowCount > 0;
+}
+
+function canEmployeeAccessOwnTaskOnly(auth, task) {
+  if (!auth || auth.role !== "employee") return true;
+  return Boolean(task && task.assigned_to && task.assigned_to === auth.sub);
 }
 
 async function notifyDonePendingReview(task, actorId) {
@@ -428,10 +481,11 @@ router.patch("/tasks/:taskId/status", requireAuth, async (req, res, next) => {
 router.get("/tasks/:taskId/comments", requireAuth, async (req, res, next) => {
   try {
     const { taskId } = req.params;
-    const taskResult = await query("select id, project_id from tasks where id = $1 limit 1", [taskId]);
+    const taskResult = await query("select id, project_id, assigned_to from tasks where id = $1 limit 1", [taskId]);
     const task = taskResult.rows[0];
     if (!task) throw notFound("Task not found");
     if (!(await canAccessProject(req.auth, task.project_id))) throw forbidden("No access to this project");
+    if (!canEmployeeAccessOwnTaskOnly(req.auth, task)) throw forbidden("Employees can access only their own task comments");
 
     const comments = await query(
       `select c.id, c.task_id, c.user_id, u.name as user_name, c.content, c.created_at
@@ -454,10 +508,11 @@ router.post("/tasks/:taskId/comments", requireAuth, async (req, res, next) => {
     if (!content || !String(content).trim()) throw badRequest("content is required");
     if (String(content).trim().length > 2000) throw badRequest("comment too long");
 
-    const taskResult = await query("select id, project_id from tasks where id = $1 limit 1", [taskId]);
+    const taskResult = await query("select id, project_id, assigned_to from tasks where id = $1 limit 1", [taskId]);
     const task = taskResult.rows[0];
     if (!task) throw notFound("Task not found");
     if (!(await canAccessProject(req.auth, task.project_id))) throw forbidden("No access to this project");
+    if (!canEmployeeAccessOwnTaskOnly(req.auth, task)) throw forbidden("Employees can comment only on their own tasks");
 
     const inserted = await query(
       `insert into comments (task_id, user_id, content)
@@ -477,6 +532,146 @@ router.post("/tasks/:taskId/comments", requireAuth, async (req, res, next) => {
 
     emitToProject(task.project_id, "comment.added", { taskId, comment });
     res.status(201).json({ comment });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/tasks/:taskId/attachments", requireAuth, async (req, res, next) => {
+  try {
+    const { taskId } = req.params;
+    const taskResult = await query("select id, project_id, assigned_to from tasks where id = $1 limit 1", [taskId]);
+    const task = taskResult.rows[0];
+    if (!task) throw notFound("Task not found");
+    if (!(await canAccessProject(req.auth, task.project_id))) throw forbidden("No access to this project");
+    if (!canEmployeeAccessOwnTaskOnly(req.auth, task)) throw forbidden("Employees can access only their own task attachments");
+
+    const attachments = await query(
+      `select id, task_id, file_name, file_url, mime_type, size_bytes, created_by, created_at
+       from task_attachments
+       where task_id = $1
+       order by created_at asc`,
+      [taskId]
+    );
+    res.json({ attachments: attachments.rows });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/tasks/:taskId/attachments", requireAuth, async (req, res, next) => {
+  try {
+    const { taskId } = req.params;
+    const {
+      fileName = "",
+      fileUrl = "",
+      mimeType = "",
+      sizeBytes = null,
+      fileDataBase64 = "",
+      originalFileName = "",
+    } = req.body || {};
+    const taskResult = await query("select id, project_id, assigned_to from tasks where id = $1 limit 1", [taskId]);
+    const task = taskResult.rows[0];
+    if (!task) throw notFound("Task not found");
+    if (!(await canAccessProject(req.auth, task.project_id))) throw forbidden("No access to this project");
+    if (!canEmployeeAccessOwnTaskOnly(req.auth, task)) throw forbidden("Employees can attach files only to their own tasks");
+
+    const trimmedUrlInput = String(fileUrl || "").trim();
+    const hasBinary = Boolean(String(fileDataBase64 || "").trim());
+    const hasUrl = Boolean(trimmedUrlInput);
+    if (!hasBinary && !hasUrl) throw badRequest("Either fileUrl or fileDataBase64 is required");
+
+    let finalUrl = "";
+    let finalName = "";
+    let finalMime = String(mimeType || "").slice(0, 120) || null;
+    let finalSize = null;
+
+    if (hasBinary) {
+      const { buffer, mimeType: mimeFromData } = decodeBase64Payload(fileDataBase64);
+      const sourceName = String(originalFileName || fileName || "").trim() || "attachment.bin";
+      const safeName = sanitizeFileName(sourceName, "attachment.bin");
+      const ext = path.extname(safeName).slice(0, 12);
+      const diskName = `${Date.now()}-${randomUUID()}${ext || ".bin"}`;
+      const diskPath = path.join(UPLOADS_DIR, diskName);
+      fs.writeFileSync(diskPath, buffer);
+      finalUrl = `${resolveRequestOrigin(req)}/uploads/${diskName}`;
+      finalName = safeName;
+      finalMime = finalMime || mimeFromData || "application/octet-stream";
+      finalSize = buffer.length;
+    } else {
+      try {
+        const parsed = new URL(trimmedUrlInput);
+        if (!["http:", "https:"].includes(parsed.protocol)) throw badRequest("fileUrl must be http/https");
+      } catch {
+        throw badRequest("invalid fileUrl");
+      }
+      finalUrl = trimmedUrlInput;
+      const derivedName = trimmedUrlInput.split("/").pop() || "attachment";
+      finalName = sanitizeFileName(String(fileName || "").trim() || derivedName, "attachment");
+      const parsedSize = sizeBytes == null || sizeBytes === "" ? null : Number(sizeBytes);
+      if (parsedSize != null && (!Number.isInteger(parsedSize) || parsedSize < 0 || parsedSize > 1_000_000_000)) {
+        throw badRequest("invalid sizeBytes");
+      }
+      finalSize = parsedSize;
+    }
+
+    if (finalName.length > 255) throw badRequest("fileName too long");
+    const inserted = await query(
+      `insert into task_attachments (task_id, file_name, file_url, mime_type, size_bytes, created_by)
+       values ($1, $2, $3, $4, $5, $6)
+       returning id, task_id, file_name, file_url, mime_type, size_bytes, created_by, created_at`,
+      [taskId, finalName, finalUrl, finalMime, finalSize, req.auth.sub]
+    );
+    const attachment = inserted.rows[0];
+
+    await query(
+      `insert into activity_logs (actor_id, entity_type, entity_id, action, meta_json)
+       values ($1, 'task', $2, 'task.attachment.added', $3::jsonb)`,
+      [req.auth.sub, taskId, JSON.stringify({ attachmentId: attachment.id, fileName: attachment.file_name })]
+    );
+
+    emitToProject(task.project_id, "task.attachment.added", { taskId, attachment, actorId: req.auth.sub });
+    res.status(201).json({ attachment });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete("/tasks/:taskId/attachments/:attachmentId", requireAuth, async (req, res, next) => {
+  try {
+    const { taskId, attachmentId } = req.params;
+    const taskResult = await query("select id, project_id, assigned_to from tasks where id = $1 limit 1", [taskId]);
+    const task = taskResult.rows[0];
+    if (!task) throw notFound("Task not found");
+    if (!(await canAccessProject(req.auth, task.project_id))) throw forbidden("No access to this project");
+    if (!canEmployeeAccessOwnTaskOnly(req.auth, task)) throw forbidden("Employees can remove attachments only on their own tasks");
+
+    const attachmentRes = await query(
+      "select id, created_by, file_url from task_attachments where id = $1 and task_id = $2 limit 1",
+      [attachmentId, taskId]
+    );
+    const attachment = attachmentRes.rows[0];
+    if (!attachment) throw notFound("Attachment not found");
+
+    const isPrivileged = req.auth.role === "admin" || req.auth.role === "manager";
+    if (!isPrivileged && attachment.created_by !== req.auth.sub) {
+      throw forbidden("Only creator or manager/admin can remove attachment");
+    }
+
+    await query("delete from task_attachments where id = $1", [attachmentId]);
+    try {
+      maybeDeleteLocalAttachment(attachment.file_url);
+    } catch {
+      // Keep API delete idempotent even if local file cleanup fails.
+    }
+    await query(
+      `insert into activity_logs (actor_id, entity_type, entity_id, action, meta_json)
+       values ($1, 'task', $2, 'task.attachment.removed', $3::jsonb)`,
+      [req.auth.sub, taskId, JSON.stringify({ attachmentId })]
+    );
+
+    emitToProject(task.project_id, "task.attachment.removed", { taskId, attachmentId, actorId: req.auth.sub });
+    res.json({ ok: true, attachmentId });
   } catch (error) {
     next(error);
   }
