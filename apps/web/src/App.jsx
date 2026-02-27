@@ -338,6 +338,7 @@ export default function App() {
     recurrenceEndAt: "",
   });
   const [scheduleEditor, setScheduleEditor] = useState(null);
+  const [pendingTaskDeepLinkId, setPendingTaskDeepLinkId] = useState("");
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
@@ -601,7 +602,15 @@ export default function App() {
       .then((data) => {
         const next = data.projects || [];
         setProjects(next);
-        if (!selectedProjectId && next[0]) setSelectedProjectId(next[0].id);
+        const params = new URLSearchParams(window.location.search || "");
+        const queryProjectId = String(params.get("projectId") || "");
+        if (queryProjectId && next.some((p) => p.id === queryProjectId)) {
+          setSelectedProjectId(queryProjectId);
+        } else if (!selectedProjectId && next[0]) {
+          setSelectedProjectId(next[0].id);
+        }
+        const queryTaskId = String(params.get("task") || "");
+        if (queryTaskId) setPendingTaskDeepLinkId(queryTaskId);
       })
       .catch((e) => setError(e.message));
   }, [token, selectedProjectId]);
@@ -1126,6 +1135,18 @@ export default function App() {
     await onMove(activeItem.id, targetStatus);
   }
 
+  useEffect(() => {
+    if (!pendingTaskDeepLinkId || !tasks.length) return;
+    const match = tasks.find((task) => task.id === pendingTaskDeepLinkId);
+    if (!match) return;
+    openTaskPanel(match.id, match.title, match.status).finally(() => {
+      setPendingTaskDeepLinkId("");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("task");
+      window.history.replaceState(null, "", url.toString());
+    });
+  }, [pendingTaskDeepLinkId, tasks]);
+
   async function onReadNotification(notificationId) {
     try {
       await markNotificationRead(token, notificationId);
@@ -1216,6 +1237,19 @@ export default function App() {
     const taskTitle = notification && notification.task_title ? String(notification.task_title) : "";
     const taskStatus = notification && notification.task_status ? String(notification.task_status) : "";
     await openTaskPanel(taskId, taskTitle, taskStatus);
+  }
+
+  async function copyTaskLink(task) {
+    if (!task || !task.id) return;
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("projectId", selectedProjectId);
+      url.searchParams.set("task", task.id);
+      await navigator.clipboard.writeText(url.toString());
+      pushToast("Task link copied", "info");
+    } catch {
+      setError("Could not copy task link");
+    }
   }
 
   async function approveTaskFromNotification(notification) {
@@ -2109,6 +2143,7 @@ export default function App() {
                 submitComment={submitComment}
                 submitAttachment={submitAttachment}
                 removeAttachment={removeAttachment}
+                onCopyTaskLink={copyTaskLink}
               />
             ))}
           </section>
@@ -2135,6 +2170,7 @@ export default function App() {
                 onSubmitComment={() => {}}
                 onSubmitAttachment={() => {}}
                 onRemoveAttachment={() => {}}
+                onCopyTaskLink={() => {}}
               />
             ) : null}
           </DragOverlay>
@@ -2243,6 +2279,7 @@ function KanbanColumn({
   submitComment,
   submitAttachment,
   removeAttachment,
+  onCopyTaskLink,
 }) {
   const { isOver, setNodeRef } = useDroppable({ id: `col:${statusKey}` });
   return (
@@ -2273,6 +2310,7 @@ function KanbanColumn({
             onSubmitComment={() => submitComment(task.id)}
             onSubmitAttachment={() => submitAttachment(task.id)}
             onRemoveAttachment={(attachmentId) => removeAttachment(task.id, attachmentId)}
+            onCopyTaskLink={() => onCopyTaskLink(task)}
           />
         ))}
       </div>
@@ -2301,6 +2339,7 @@ function TaskCard({
   onSubmitComment,
   onSubmitAttachment,
   onRemoveAttachment,
+  onCopyTaskLink,
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `task:${task.id}` });
   const style = {
@@ -2337,6 +2376,9 @@ function TaskCard({
         ))}
         <button type="button" className="task-btn task-btn-muted" onPointerDown={(e) => e.stopPropagation()} onClick={() => onUpdateSchedule(task)}>
           Schedule
+        </button>
+        <button type="button" className="task-btn task-btn-muted" onPointerDown={(e) => e.stopPropagation()} onClick={onCopyTaskLink}>
+          Copy link
         </button>
         {canReview && task.status === "done" && task.review_status !== "approved" ? (
           <>
