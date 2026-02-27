@@ -53,7 +53,7 @@ async function runSlaScan(policyInput = null) {
         remindAt: new Date().toISOString(),
         whatsappPhone: task.whatsapp_phone || "",
         whatsappText: [
-          `Nexus Flow reminder: "${task.title}" is still not done.`,
+          `listO reminder: "${task.title}" is still not done.`,
           `SLA: ${policy.defaultHours}h exceeded.`,
           `Task info: ${taskInfoText(task)}`,
           `Task ID: ${task.id.slice(0, 8)}`,
@@ -121,7 +121,7 @@ async function runSlaScan(policyInput = null) {
             remindAt: new Date().toISOString(),
             whatsappPhone: manager.whatsapp_phone || "",
             whatsappText: [
-              `Nexus Flow escalation: "${task.title}" still unresolved.`,
+              `listO escalation: "${task.title}" still unresolved.`,
               `Assignee: ${task.assignee_name}`,
               `Task info: ${taskInfoText(task)}`,
               `Task ID: ${task.id.slice(0, 8)}`,

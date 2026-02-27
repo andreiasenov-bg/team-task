@@ -1,7 +1,7 @@
 const spec = {
   openapi: "3.0.3",
   info: {
-    title: "Nexus Flow API",
+    title: "listO API",
     version: "0.1.0",
     description: "API for projects, tasks, auth, activity, and realtime support.",
   },

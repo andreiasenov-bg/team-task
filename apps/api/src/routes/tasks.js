@@ -102,7 +102,7 @@ async function notifyDonePendingReview(task, actorId) {
         message: `Task "${task.title}" was moved to done and needs review.`,
         remindAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         whatsappPhone: manager.whatsapp_phone || "",
-        whatsappText: `Nexus Flow: Task "${task.title}" е в Done и чака review. ID: ${task.id.slice(0, 8)}`,
+        whatsappText: `listO: Task "${task.title}" е в Done и чака review. ID: ${task.id.slice(0, 8)}`,
         dedupeKey: `task.done.pending_review:${task.id}`,
         dedupeHours: 24,
       })
@@ -130,8 +130,8 @@ async function notifyAssigneeRejected(task, reviewerId, reviewComment = "") {
     remindAt: new Date().toISOString(),
     whatsappPhone: user.rows[0] ? user.rows[0].whatsapp_phone || "" : "",
     whatsappText: reviewComment
-      ? `Nexus Flow: Task "${task.title}" е reject-ната. Коментар: ${reviewComment}`
-      : `Nexus Flow: Task "${task.title}" е reject-ната.`,
+      ? `listO: Task "${task.title}" е reject-ната. Коментар: ${reviewComment}`
+      : `listO: Task "${task.title}" е reject-ната.`,
     dedupeKey: `task.review.rejected:${task.id}`,
     dedupeHours: 12,
   });
@@ -186,7 +186,7 @@ async function checkWipLimit(projectId, status, actorId) {
       title: "WIP limit warning",
       message: warningMessage,
       remindAt: new Date().toISOString(),
-      whatsappText: `Nexus Flow WIP alert: ${warningMessage}`,
+      whatsappText: `listO WIP alert: ${warningMessage}`,
       dedupeKey: `project.wip.limit.exceeded:${projectId}:${status}:${limit}`,
       dedupeHours: 2,
     }

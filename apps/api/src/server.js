@@ -46,7 +46,7 @@ async function start() {
 
   server.listen(config.port, config.host, () => {
     // eslint-disable-next-line no-console
-    console.log(`Nexus Flow API running on http://${config.host}:${config.port}`);
+    console.log(`listO API running on http://${config.host}:${config.port}`);
   });
 }
 

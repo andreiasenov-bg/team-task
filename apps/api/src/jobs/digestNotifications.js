@@ -32,7 +32,7 @@ async function runDigestScan() {
 
     const title = "Daily digest summary";
     const message = `Open: ${stats.open_count}, In progress: ${stats.in_progress_count}, Pending review: ${stats.pending_review_count}, SLA overdue: ${stats.sla_overdue_count}.`;
-    const whatsappText = `Nexus Flow daily digest\nOpen: ${stats.open_count}\nIn progress: ${stats.in_progress_count}\nPending review: ${stats.pending_review_count}\nSLA overdue: ${stats.sla_overdue_count}`;
+    const whatsappText = `listO daily digest\nOpen: ${stats.open_count}\nIn progress: ${stats.in_progress_count}\nPending review: ${stats.pending_review_count}\nSLA overdue: ${stats.sla_overdue_count}`;
     const dateKey = new Date().toISOString().slice(0, 10);
 
     for (const recipient of recipients.rows) {

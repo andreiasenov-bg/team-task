@@ -31,7 +31,7 @@ async function runReviewReminderScan() {
           title: "Reminder: task still waiting for review",
           message: `Task "${task.title}" is done but not reviewed for over 24h.`,
           remindAt: new Date().toISOString(),
-          whatsappText: `Nexus Flow reminder: "${task.title}" чака review над 24ч.`,
+          whatsappText: `listO reminder: "${task.title}" чака review над 24ч.`,
           dedupeKey: `task.review.reminder:${task.id}:${reviewer.id}`,
           dedupeHours: 24,
         });

@@ -1,4 +1,4 @@
-# Nexus Flow Best Practices
+# listO Best Practices
 
 ## Product standards we now follow
 - API-first: all task/project actions go through REST endpoints, frontend is thin SPA client.

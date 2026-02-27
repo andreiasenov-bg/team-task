@@ -8,7 +8,7 @@ router.get("/health", async (_req, res, next) => {
     await query("select 1");
     res.json({
       ok: true,
-      service: "nexus-flow-api",
+      service: "listo-api",
       time: Date.now(),
     });
   } catch (error) {

@@ -2,7 +2,7 @@
   "name": "@team-task/api",
   "version": "0.1.0",
   "private": true,
-  "description": "Nexus Flow API (Express + PostgreSQL + JWT + RBAC)",
+  "description": "listO API (Express + PostgreSQL + JWT + RBAC)",
   "main": "src/server.js",
   "scripts": {
     "dev": "node src/server.js",

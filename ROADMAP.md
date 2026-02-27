@@ -1,4 +1,4 @@
-# Nexus Flow Master Roadmap (Hardcoded)
+# listO Master Roadmap (Hardcoded)
 
 Този файл е оперативен план за автономна работа по проекта.
 Структурата е фиксирана; променям само статуси, ETA и бележки за прогрес.

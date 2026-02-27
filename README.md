@@ -1,4 +1,4 @@
-# Nexus Flow (team-task)
+# listO (team-task)
 
 Modern task platform with:
 - React SPA frontend

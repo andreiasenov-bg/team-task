@@ -1488,7 +1488,7 @@ export default function App() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `nexus-flow-${selectedProjectId}.ics`;
+      a.download = `listo-${selectedProjectId}.ics`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -1500,7 +1500,7 @@ export default function App() {
     return (
       <main className="shell auth-shell">
         <section className="card auth-card">
-          <h1>Nexus Flow</h1>
+          <h1>listO</h1>
           <p>Sign in to open your board. API status: {healthState}</p>
           <div className="demo-login-row">
             {DEMO_USERS.map((user) => (
@@ -1538,7 +1538,7 @@ export default function App() {
     <main className={`shell density-${density}`}>
       <header className="topbar">
         <div>
-          <h1>{isEmployee ? "Nexus Flow My Tasks" : "Nexus Flow Board"}</h1>
+          <h1>{isEmployee ? "listO My Tasks" : "listO Board"}</h1>
           <p>Signed in as {currentUser ? `${currentUser.name} (${currentUser.role})` : "loading..."}</p>
           <small className="shortcut-hint">Shortcuts: N new task, / search, B board, C calendar</small>
         </div>

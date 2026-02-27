@@ -27,13 +27,13 @@ async function seed() {
   const admin = await query("select id from users where email = $1 limit 1", [adminEmail]);
 
   let projectId = "";
-  const existingProject = await query("select id from projects where title = $1 limit 1", ["Nexus Flow Launch"]);
+  const existingProject = await query("select id from projects where title = $1 limit 1", ["listO Launch"]);
   if (existingProject.rowCount > 0) {
     projectId = existingProject.rows[0].id;
   } else {
     const inserted = await query(
       `insert into projects (title, description, owner_id, status)
-       values ('Nexus Flow Launch', 'Initial migration project', $1, 'active')
+       values ('listO Launch', 'Initial migration project', $1, 'active')
        returning id`,
       [manager.rows[0].id]
     );

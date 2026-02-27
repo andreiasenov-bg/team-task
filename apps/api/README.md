@@ -1,4 +1,4 @@
-# Nexus Flow API (migration baseline)
+# listO API (migration baseline)
 
 This folder contains the new backend baseline for the API + SPA migration.
 
@@ -68,7 +68,7 @@ Default staging ports:
 2. In Meta WhatsApp App webhook config:
    - Callback URL: `https://<your-domain>/api/integrations/whatsapp/webhook`
    - Verify token: same as `WHATSAPP_VERIFY_TOKEN`
-3. Link a Nexus user with phone:
+3. Link a listO user with phone:
    - `PATCH /api/integrations/whatsapp/link` with `{ "phone": "+359..." }`
 4. Supported bot commands:
    - `help`

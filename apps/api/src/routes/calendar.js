@@ -205,7 +205,7 @@ router.get("/calendar.ics", requireAuth, async (req, res, next) => {
     const lines = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
-      "PRODID:-//Nexus Flow//Calendar//EN",
+      "PRODID:-//listO//Calendar//EN",
       "CALSCALE:GREGORIAN",
     ];
     for (const ev of events) {
@@ -223,7 +223,7 @@ router.get("/calendar.ics", requireAuth, async (req, res, next) => {
     lines.push("END:VCALENDAR");
 
     res.setHeader("Content-Type", "text/calendar; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename=\"nexus-flow-${projectId}.ics\"`);
+    res.setHeader("Content-Disposition", `attachment; filename=\"listo-${projectId}.ics\"`);
     res.send(lines.join("\r\n"));
   } catch (error) {
     next(error);

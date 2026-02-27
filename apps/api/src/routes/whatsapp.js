@@ -220,7 +220,7 @@ async function notifyDonePendingReview(task, actorId) {
         message: `Task "${task.title}" was moved to done and needs review.`,
         remindAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
         whatsappPhone: manager.whatsapp_phone || "",
-        whatsappText: `Nexus Flow: Task "${task.title}" е в Done и чака review. ID: ${task.id.slice(0, 8)}`,
+        whatsappText: `listO: Task "${task.title}" е в Done и чака review. ID: ${task.id.slice(0, 8)}`,
         dedupeKey: `task.done.pending_review:${task.id}`,
         dedupeHours: 24,
       })
@@ -674,7 +674,7 @@ router.post("/integrations/whatsapp/webhook", async (req, res, next) => {
           if (!user) {
             await sendTextMessageWithRetry(
               from,
-              "Този номер не е свързан с Nexus Flow акаунт. Свържи номер през профил или API endpoint /api/integrations/whatsapp/link."
+              "Този номер не е свързан с listO акаунт. Свържи номер през профил или API endpoint /api/integrations/whatsapp/link."
             );
             continue;
           }
