@@ -1882,8 +1882,8 @@ export default function App() {
     return (
       <main className="shell auth-shell">
         <section className="card auth-card">
-          <div className="topbar-row">
-            <div className="view-switch">
+          <div className="auth-lang-row">
+            <div className="view-switch lang-switch">
               <button type="button" className={lang === "bg" ? "active" : ""} onClick={() => setUiLang("bg")}>BG</button>
               <button type="button" className={lang === "en" ? "active" : ""} onClick={() => setUiLang("en")}>EN</button>
             </div>
@@ -1956,7 +1956,7 @@ export default function App() {
               <button type="button" onClick={() => setViewMode("board")} className={viewMode === "board" ? "active" : ""}>{t("board", "Board")}</button>
               <button type="button" onClick={() => setViewMode("calendar")} className={viewMode === "calendar" ? "active" : ""}>{t("calendar", "Calendar")}</button>
             </div>
-            <div className="view-switch">
+            <div className="view-switch lang-switch">
               <button type="button" className={lang === "bg" ? "active" : ""} onClick={() => setUiLang("bg")}>BG</button>
               <button type="button" className={lang === "en" ? "active" : ""} onClick={() => setUiLang("en")}>EN</button>
             </div>

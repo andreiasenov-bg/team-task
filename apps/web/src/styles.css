@@ -290,7 +290,7 @@ button:active {
 
 .topbar-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 180px;
+  grid-template-columns: minmax(0, 1fr) 180px auto;
   align-items: center;
   gap: 8px;
 }
@@ -338,11 +338,27 @@ button:active {
   margin-top: 0;
 }
 
+.lang-switch {
+  width: 110px;
+  justify-self: end;
+}
+
 .view-switch {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 6px;
   margin-top: 8px;
+}
+
+.auth-lang-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.auth-lang-row .view-switch {
+  margin-top: 0;
+  width: 110px;
 }
 
 .view-switch button {
@@ -1118,7 +1134,7 @@ textarea {
 .notif-panel {
   position: absolute;
   right: 0;
-  top: 136px;
+  top: calc(100% + 8px);
   width: min(490px, 92vw);
   max-height: 500px;
   overflow: auto;
