@@ -25,6 +25,7 @@
     "docker:smoke:staging": "OLD_HEALTH_URL=http://127.0.0.1:4310/api/health NEW_API_BASE=http://127.0.0.1:4320/api bash scripts/smoke.sh",
     "ops:backup": "bash scripts/backup-db.sh",
     "ops:restore": "bash scripts/restore-db.sh",
-    "monitor:status": "bash scripts/status.sh"
+    "monitor:status": "bash scripts/status.sh",
+    "monitor:e2e": "bash scripts/e2e-critical.sh"
   }
 }

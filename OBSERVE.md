@@ -62,7 +62,20 @@ This prints:
 - web probe
 - smoke test tail
 
-## 6) Final validation
+## 6) Critical role-flow e2e
+
+```bash
+npm run monitor:e2e
+```
+
+This validates end-to-end:
+- login for admin/manager/employee
+- admin creates task assigned to employee
+- employee can list/comment/attach/move to done
+- employee is blocked by ACL on foreign task and task review
+- manager can approve + archive task
+
+## 7) Final validation
 
 ```bash
 npm run monitor:final
