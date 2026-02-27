@@ -166,6 +166,28 @@ function queueErrorHint(errorMeta) {
   return "";
 }
 
+function ListoMark() {
+  return (
+    <svg viewBox="0 0 56 56" aria-hidden="true" focusable="false">
+      <defs>
+        <linearGradient id="listoMarkBg" x1="6" y1="4" x2="50" y2="52" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="#8FD3FF" />
+          <stop offset="0.54" stopColor="#3F8CFF" />
+          <stop offset="1" stopColor="#0F57D2" />
+        </linearGradient>
+      </defs>
+      <rect x="1.5" y="1.5" width="53" height="53" rx="14" fill="url(#listoMarkBg)" />
+      <rect x="13" y="13" width="18" height="30" rx="5" fill="rgba(255, 255, 255, 0.94)" />
+      <rect x="18" y="19" width="8" height="2.8" rx="1.4" fill="#2B68D6" />
+      <rect x="18" y="25" width="8" height="2.8" rx="1.4" fill="#2B68D6" />
+      <rect x="18" y="31" width="8" height="2.8" rx="1.4" fill="#2B68D6" />
+      <circle cx="38.5" cy="28" r="9" fill="none" stroke="#FFFFFF" strokeWidth="4" />
+      <circle cx="38.5" cy="28" r="5.1" fill="#FF8266" />
+      <path d="M35.8 28l1.7 1.9 3.5-3.7" fill="none" stroke="#FFF" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function weekdayFromDateInput(dateInput) {
   const d = dateInput ? new Date(dateInput) : new Date();
   if (Number.isNaN(d.getTime())) return "mon";
@@ -1500,8 +1522,15 @@ export default function App() {
     return (
       <main className="shell auth-shell">
         <section className="card auth-card">
-          <h1>listO</h1>
-          <p>Sign in to open your board. API status: {healthState}</p>
+          <div className="auth-brand">
+            <div className="logo-mark auth-logo-mark">
+              <ListoMark />
+            </div>
+            <div>
+              <h1 className="brand-wordmark">list<span>O</span></h1>
+              <p>Sign in to open your board. API status: {healthState}</p>
+            </div>
+          </div>
           <div className="demo-login-row">
             {DEMO_USERS.map((user) => (
               <button key={user.key} type="button" className="ghost-btn" onClick={() => useDemoAccount(user.key)}>
@@ -1538,9 +1567,12 @@ export default function App() {
     <main className={`shell density-${density}`}>
       <header className="topbar">
         <div className="topbar-brand">
-          <div className="logo-mark" aria-hidden="true">lO</div>
+          <div className="logo-mark">
+            <ListoMark />
+          </div>
           <div className="topbar-copy">
-            <h1>{isEmployee ? "My Tasks" : "Board Control"}</h1>
+            <h1 className="brand-wordmark">list<span>O</span></h1>
+            <small className="brand-subtitle">{isEmployee ? "My Tasks" : "Board Control"}</small>
             <div className="topbar-meta">
               <span className="topbar-chip">{currentUser ? currentUser.role : "..."}</span>
               <span className="topbar-chip">{projects.length} projects</span>
