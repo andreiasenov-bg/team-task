@@ -49,7 +49,20 @@ This validates:
 - projects list
 - tasks list
 
-## 5) Final validation
+## 5) One-command full status snapshot
+
+```bash
+npm run monitor:status
+```
+
+This prints:
+- current git branch/commit/dirty state
+- running containers
+- API health probe
+- web probe
+- smoke test tail
+
+## 6) Final validation
 
 ```bash
 npm run monitor:final

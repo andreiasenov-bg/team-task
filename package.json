@@ -24,6 +24,7 @@
     "docker:up:staging": "WEB_PORT=5174 API_PORT=4320 APP_PORT=4310 docker compose up -d --build",
     "docker:smoke:staging": "OLD_HEALTH_URL=http://127.0.0.1:4310/api/health NEW_API_BASE=http://127.0.0.1:4320/api bash scripts/smoke.sh",
     "ops:backup": "bash scripts/backup-db.sh",
-    "ops:restore": "bash scripts/restore-db.sh"
+    "ops:restore": "bash scripts/restore-db.sh",
+    "monitor:status": "bash scripts/status.sh"
   }
 }
