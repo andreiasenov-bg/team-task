@@ -1852,9 +1852,12 @@ export default function App() {
               const errorMeta = parseQueueError(item.last_error);
               return (
                 <div key={item.id} className="queue-item">
-                  <div className="queue-item-head">
-                    <span className={`queue-status queue-status-${String(item.status || "pending")}`}>{item.status || "pending"}</span>
-                    <strong className="queue-recipient">{item.recipient || "Unknown recipient"}</strong>
+                  <div className="queue-item-topline">
+                    <div className="queue-item-head">
+                      <span className={`queue-status queue-status-${String(item.status || "pending")}`}>{item.status || "pending"}</span>
+                      <strong className="queue-recipient">{item.recipient || "Unknown recipient"}</strong>
+                    </div>
+                    <small className="queue-created">Created {formatQueueDate(item.created_at)}</small>
                   </div>
                   <div className="queue-item-meta">
                     <span>Attempts {item.attempts}/{item.max_attempts}</span>
@@ -1863,7 +1866,7 @@ export default function App() {
                   </div>
                   {errorMeta ? (
                     <div className="queue-error">
-                      <p>{errorMeta.message}</p>
+                      <p title={errorMeta.message}>{errorMeta.message}</p>
                       <div className="queue-error-meta">
                         {errorMeta.type ? <small>Type {errorMeta.type}</small> : null}
                         {errorMeta.code ? <small>Code {errorMeta.code}</small> : null}
@@ -1871,11 +1874,11 @@ export default function App() {
                       </div>
                     </div>
                   ) : null}
-                {item.status === "failed" ? (
-                  <div className="queue-actions">
-                    <button type="button" className="secondary-btn" onClick={() => onRequeueWhatsapp(item.id)}>Requeue now</button>
-                  </div>
-                ) : null}
+                  {item.status === "failed" ? (
+                    <div className="queue-actions">
+                      <button type="button" className="secondary-btn" onClick={() => onRequeueWhatsapp(item.id)}>Requeue now</button>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}

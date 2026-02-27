@@ -517,9 +517,25 @@ button:active {
   border: 1px solid #d2deed;
   border-radius: 12px;
   background: #fbfdff;
-  padding: 12px;
+  padding: 10px 12px;
   display: grid;
-  gap: 10px;
+  gap: 8px;
+  box-shadow: 0 6px 18px rgba(26, 55, 86, 0.06);
+}
+
+.queue-item-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.queue-created {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .queue-item-head {
@@ -530,10 +546,11 @@ button:active {
 }
 
 .queue-recipient {
-  font-size: 18px;
-  line-height: 1.2;
+  font-size: 16px;
+  line-height: 1.1;
   color: var(--ink-1);
   overflow-wrap: anywhere;
+  font-feature-settings: "tnum" 1;
 }
 
 .queue-status {
@@ -577,8 +594,8 @@ button:active {
 .queue-item-meta span {
   border: 1px solid #d0deef;
   border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 12px;
+  padding: 3px 10px;
+  font-size: 11px;
   color: #33506f;
   background: #f3f8ff;
 }
@@ -588,12 +605,13 @@ button:active {
   border-left: 4px solid #c46d7a;
   border-radius: 10px;
   background: #fff6f7;
-  padding: 10px;
+  padding: 8px 10px;
 }
 
 .queue-error p {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
+  line-height: 1.35;
   color: #7b2431;
   word-break: break-word;
 }
@@ -609,17 +627,21 @@ button:active {
   margin: 0;
   border: 1px solid #e8cfd3;
   border-radius: 999px;
-  padding: 2px 8px;
+  padding: 2px 7px;
+  font-size: 11px;
   color: #8a3a49;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 .queue-actions {
-  max-width: 240px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .queue-actions button {
-  width: 100%;
+  width: auto;
+  min-width: 170px;
+  min-height: 36px;
 }
 
 .assistant-item {
@@ -1629,6 +1651,19 @@ textarea {
     align-items: flex-start;
     flex-direction: column;
     gap: 8px;
+  }
+
+  .queue-item-topline {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .queue-created {
+    white-space: normal;
+  }
+
+  .queue-actions {
+    justify-content: flex-start;
   }
 
   .calendar-event {
