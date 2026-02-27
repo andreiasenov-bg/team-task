@@ -1,30 +1,30 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&display=swap");
 
 :root {
-  --bg-a: #fff8f1;
-  --bg-b: #eef7ff;
-  --bg-c: #f5f8ff;
-  --card: rgba(255, 255, 255, 0.85);
+  --bg-a: #f3f6f8;
+  --bg-b: #eaf0f4;
+  --bg-c: #f8fbfd;
+  --card: rgba(255, 255, 255, 0.88);
   --card-strong: #ffffff;
-  --line: #d6dfef;
-  --ink-1: #0f172a;
-  --ink-2: #4b587a;
-  --ink-3: #6f7e9f;
-  --brand: #0f9d7b;
-  --brand-2: #127fbe;
-  --todo: #7d5aef;
-  --progress: #f18b2c;
-  --done: #0f9d7b;
-  --danger: #c53636;
-  --warn: #b46a12;
-  --ok: #0f8a43;
-  --radius-xl: 18px;
-  --radius-lg: 14px;
-  --radius-md: 10px;
-  --shadow-soft: 0 10px 30px rgba(15, 23, 42, 0.07);
-  --shadow-strong: 0 20px 40px rgba(15, 23, 42, 0.14);
-  --font-title: "Space Grotesk", "Avenir Next", sans-serif;
-  --font-ui: "Plus Jakarta Sans", "Segoe UI", sans-serif;
+  --line: #d5dee5;
+  --ink-1: #182128;
+  --ink-2: #485560;
+  --ink-3: #637482;
+  --brand: #0f8c78;
+  --brand-2: #1b6f9d;
+  --todo: #4d7ea6;
+  --progress: #c67f2a;
+  --done: #18825e;
+  --danger: #bf3a2f;
+  --warn: #9a6c1f;
+  --ok: #127f5a;
+  --radius-xl: 16px;
+  --radius-lg: 12px;
+  --radius-md: 9px;
+  --shadow-soft: 0 10px 24px rgba(24, 33, 40, 0.08);
+  --shadow-strong: 0 20px 36px rgba(24, 33, 40, 0.13);
+  --font-title: "Sora", "Avenir Next", sans-serif;
+  --font-ui: "Manrope", "Segoe UI", sans-serif;
 }
 
 * {
@@ -38,9 +38,9 @@ body {
   color: var(--ink-1);
   font-family: var(--font-ui);
   background:
-    radial-gradient(1200px 700px at -5% -20%, #ffe8cc 0%, transparent 58%),
-    radial-gradient(1000px 640px at 112% -8%, #d9ecff 0%, transparent 54%),
-    linear-gradient(135deg, var(--bg-a), var(--bg-b) 52%, var(--bg-c));
+    radial-gradient(900px 420px at 2% -12%, #dceef1 0%, transparent 56%),
+    radial-gradient(820px 400px at 103% -7%, #f2e6d7 0%, transparent 53%),
+    linear-gradient(145deg, var(--bg-a), var(--bg-b) 56%, var(--bg-c));
 }
 
 h1,
@@ -54,7 +54,7 @@ strong {
 .shell {
   max-width: 1320px;
   margin: 0 auto;
-  padding: 28px;
+  padding: 24px;
 }
 
 .auth-shell {
@@ -66,9 +66,9 @@ strong {
 .card {
   background: var(--card);
   border: 1px solid color-mix(in srgb, var(--line) 82%, #ffffff 18%);
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(12px);
   border-radius: var(--radius-xl);
-  padding: 16px;
+  padding: 15px;
   box-shadow: var(--shadow-soft);
 }
 
@@ -112,10 +112,10 @@ select,
 textarea,
 button {
   width: 100%;
-  min-height: 40px;
+  min-height: 39px;
   margin-top: 6px;
   border-radius: var(--radius-md);
-  border: 1px solid #c8d4ea;
+  border: 1px solid #c7d2db;
   padding: 9px 11px;
   font-family: inherit;
   font-size: 14px;
@@ -124,7 +124,7 @@ button {
 input,
 select,
 textarea {
-  background: rgba(255, 255, 255, 0.96);
+  background: rgba(255, 255, 255, 0.98);
   color: var(--ink-1);
 }
 
@@ -140,15 +140,15 @@ button {
   cursor: pointer;
   color: #fff;
   border-color: transparent;
-  background: linear-gradient(140deg, var(--brand-2), var(--brand));
+  background: linear-gradient(140deg, #1e78aa, #0f8975);
   font-weight: 600;
   letter-spacing: 0.01em;
-  transition: transform 130ms ease, box-shadow 130ms ease, filter 130ms ease;
+  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
 }
 
 button:hover {
   transform: translateY(-1px);
-  box-shadow: 0 12px 22px rgba(18, 127, 190, 0.25);
+  box-shadow: 0 10px 18px rgba(23, 99, 145, 0.24);
 }
 
 button:active {
@@ -159,9 +159,9 @@ button:active {
 .secondary-btn,
 .task-btn,
 .comment-fab {
-  border: 1px solid #c8d5ea;
-  color: #18325f;
-  background: linear-gradient(180deg, #ffffff, #f3f7ff);
+  border: 1px solid #c6d2dc;
+  color: #1f364c;
+  background: linear-gradient(180deg, #ffffff, #f2f6f9);
   box-shadow: none;
 }
 
@@ -180,19 +180,19 @@ button:active {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 18px;
-  padding: 16px 18px;
-  border: 1px solid #d6e2f3;
-  border-radius: 20px;
-  background: linear-gradient(155deg, rgba(255, 255, 255, 0.8), rgba(240, 248, 255, 0.8));
+  gap: 16px;
+  padding: 15px 16px;
+  border: 1px solid #d2dbe4;
+  border-radius: 16px;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.84), rgba(243, 248, 251, 0.86));
   box-shadow: var(--shadow-soft);
 }
 
 .topbar h1 {
   margin: 0;
-  font-size: clamp(32px, 4vw, 46px);
-  letter-spacing: -0.04em;
-  line-height: 0.94;
+  font-size: clamp(28px, 4vw, 40px);
+  letter-spacing: -0.03em;
+  line-height: 0.96;
 }
 
 .topbar p {
@@ -201,7 +201,7 @@ button:active {
 }
 
 .topbar-actions {
-  min-width: 350px;
+  min-width: 340px;
   position: relative;
 }
 
@@ -239,9 +239,9 @@ button:active {
   margin-top: 8px;
   padding: 4px 8px;
   border-radius: 999px;
-  background: #ebf5ff;
-  border: 1px solid #cfe2fb;
-  color: #35598a;
+  background: #edf4f7;
+  border: 1px solid #d0dde6;
+  color: #446173;
   font-size: 12px;
 }
 
@@ -260,13 +260,13 @@ button:active {
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 10px;
+  gap: 9px;
 }
 
 .kpi-item {
   position: relative;
   overflow: hidden;
-  padding: 14px;
+  padding: 13px;
   background: var(--card-strong);
 }
 
@@ -275,27 +275,27 @@ button:active {
   position: absolute;
   inset: 0 auto 0 0;
   width: 4px;
-  background: linear-gradient(180deg, var(--brand-2), var(--brand));
+  background: linear-gradient(180deg, #2f7aa3, #0f8772);
 }
 
 .kpi-item:nth-child(2)::before {
-  background: linear-gradient(180deg, #f1a543, #c97212);
+  background: linear-gradient(180deg, #d59c41, #a96c1f);
 }
 
 .kpi-item:nth-child(3)::before {
-  background: linear-gradient(180deg, #f4ba59, #b46a12);
+  background: linear-gradient(180deg, #d0aa50, #9a6c1f);
 }
 
 .kpi-item:nth-child(4)::before {
-  background: linear-gradient(180deg, #d65b43, #a12d1e);
+  background: linear-gradient(180deg, #cf6652, #a23b2f);
 }
 
 .kpi-item:nth-child(5)::before {
-  background: linear-gradient(180deg, #a34ed8, #6830b1);
+  background: linear-gradient(180deg, #4f89b1, #2f6387);
 }
 
 .kpi-item:nth-child(6)::before {
-  background: linear-gradient(180deg, #8c9ab3, #5b6780);
+  background: linear-gradient(180deg, #8492a4, #5e6979);
 }
 
 .kpi-item span {
@@ -524,29 +524,29 @@ button:active {
 }
 
 .column {
-  border: 1px solid #d4deef;
+  border: 1px solid #cfd9e2;
   border-radius: var(--radius-xl);
-  padding: 12px;
+  padding: 10px;
   min-height: 320px;
   transition: transform 130ms ease, border-color 130ms ease, box-shadow 130ms ease;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .column-todo {
-  background: linear-gradient(180deg, rgba(125, 90, 239, 0.08), rgba(255, 255, 255, 0.75));
+  background: linear-gradient(180deg, rgba(65, 116, 152, 0.11), rgba(255, 255, 255, 0.82));
 }
 
 .column-in_progress {
-  background: linear-gradient(180deg, rgba(241, 139, 44, 0.09), rgba(255, 255, 255, 0.75));
+  background: linear-gradient(180deg, rgba(208, 141, 57, 0.12), rgba(255, 255, 255, 0.82));
 }
 
 .column-done {
-  background: linear-gradient(180deg, rgba(15, 157, 123, 0.1), rgba(255, 255, 255, 0.75));
+  background: linear-gradient(180deg, rgba(20, 134, 94, 0.12), rgba(255, 255, 255, 0.82));
 }
 
 .column-over {
   transform: translateY(-1px);
-  border-color: #9fbae7;
+  border-color: #89aeca;
   box-shadow: var(--shadow-soft);
 }
 
@@ -555,10 +555,10 @@ button:active {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 13px;
+  font-size: 12px;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: #2f405f;
+  letter-spacing: 0.08em;
+  color: #314657;
 }
 
 .column h3 span {
@@ -569,7 +569,7 @@ button:active {
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  border: 1px solid #cdd9ee;
+  border: 1px solid #cfd8df;
   background: #fff;
 }
 
@@ -580,17 +580,17 @@ button:active {
 
 .task {
   background: #fff;
-  border: 1px solid #d7e1f3;
+  border: 1px solid #d0dbe4;
   border-radius: var(--radius-lg);
-  padding: 11px;
+  padding: 10px;
   cursor: grab;
   position: relative;
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+  box-shadow: 0 5px 14px rgba(24, 33, 40, 0.08);
   animation: rise 180ms ease-out;
 }
 
 .task:hover {
-  border-color: #a8c0e8;
+  border-color: #93b1c7;
   box-shadow: var(--shadow-strong);
 }
 
@@ -599,7 +599,7 @@ button:active {
 }
 
 .task-overlay {
-  box-shadow: 0 20px 40px rgba(18, 127, 190, 0.28);
+  box-shadow: 0 20px 34px rgba(21, 99, 145, 0.24);
 }
 
 .task strong {
@@ -611,18 +611,18 @@ button:active {
 .task p {
   margin: 8px 0;
   font-size: 13px;
-  color: #344768;
+  color: #405261;
 }
 
 .task small {
   display: inline-flex;
   margin: 3px 7px 0 0;
   border-radius: 999px;
-  border: 1px solid #d5deef;
+  border: 1px solid #d5dde4;
   padding: 2px 8px;
   font-size: 11px;
-  color: #3f5377;
-  background: #f6f9ff;
+  color: #465867;
+  background: #f3f7fa;
   font-weight: 600;
 }
 
@@ -667,22 +667,22 @@ button:active {
 }
 
 .task-actions .task-btn.move-todo {
-  border-color: #cec2fa;
-  color: #5937cc;
-  background: #f4f1ff;
+  border-color: #b8cddb;
+  color: #325774;
+  background: #edf5fa;
 }
 
 .task-actions .task-btn.move-in_progress {
-  border-color: #f2cb94;
-  color: #9f5400;
-  background: #fff5e7;
+  border-color: #ddc392;
+  color: #875312;
+  background: #fbf3e5;
 }
 
 .task-actions .task-btn.move-done,
 .task-actions .task-btn.task-btn-ok {
-  border-color: #9edbc8;
-  color: #0f6b52;
-  background: #eafbf5;
+  border-color: #9fcfbe;
+  color: #13684d;
+  background: #e9f7f1;
 }
 
 .task-actions .task-btn.task-btn-danger {
@@ -692,9 +692,9 @@ button:active {
 }
 
 .task-actions .task-btn.task-btn-muted {
-  border-color: #cad8ee;
-  color: #314f7a;
-  background: #f3f8ff;
+  border-color: #ced7de;
+  color: #3b566d;
+  background: #f2f6f9;
 }
 
 .comment-fab {
@@ -710,9 +710,9 @@ button:active {
 
 .comment-panel {
   margin-top: 10px;
-  border: 1px solid #d8e2f5;
+  border: 1px solid #d7dee6;
   border-radius: var(--radius-md);
-  background: #fbfdff;
+  background: #f8fbfd;
   padding: 8px;
 }
 
@@ -732,7 +732,7 @@ button:active {
 }
 
 .comment-item {
-  border: 1px solid #e3e9f4;
+  border: 1px solid #e0e6ec;
   border-radius: 8px;
   padding: 7px;
   background: #fff;
@@ -760,7 +760,7 @@ button:active {
   grid-template-columns: 1fr auto;
   align-items: center;
   gap: 8px;
-  border: 1px solid #e3e9f4;
+  border: 1px solid #e0e6ec;
   border-radius: 8px;
   padding: 6px 8px;
   background: #fff;
@@ -790,17 +790,19 @@ textarea {
   position: absolute;
   right: 0;
   top: 136px;
-  width: min(450px, 90vw);
-  max-height: 430px;
+  width: min(490px, 92vw);
+  max-height: 500px;
   overflow: auto;
   z-index: 10;
+  border: 1px solid #d0dbe5;
+  box-shadow: 0 24px 40px rgba(24, 33, 40, 0.14);
 }
 
 .notif-item {
   margin-top: 8px;
   padding: 9px;
-  border-radius: 10px;
-  border: 1px solid #dbe4f3;
+  border-radius: 9px;
+  border: 1px solid #d5dfe7;
   background: #fff;
 }
 
@@ -906,15 +908,15 @@ textarea {
 .notif-tabs button {
   min-height: 30px;
   margin-top: 0;
-  color: #1e3c68;
-  border: 1px solid #c8d8f2;
-  background: linear-gradient(180deg, #fff, #edf4ff);
+  color: #264359;
+  border: 1px solid #c8d4dd;
+  background: linear-gradient(180deg, #fff, #f0f5f8);
 }
 
 .notif-tabs button.active {
   color: #fff;
   border-color: transparent;
-  background: linear-gradient(130deg, var(--brand-2), var(--brand));
+  background: linear-gradient(130deg, #1e78aa, #0f8975);
 }
 
 .notif-actions {
@@ -933,9 +935,9 @@ textarea {
   margin-top: 8px;
   margin-bottom: 10px;
   padding: 10px;
-  border: 1px solid #d8e3f5;
-  border-radius: 10px;
-  background: #f8fbff;
+  border: 1px solid #d3dde6;
+  border-radius: 9px;
+  background: #f6fafc;
 }
 
 .notif-prefs label {
@@ -960,8 +962,8 @@ textarea {
 }
 
 .notif-unread {
-  border-color: #b7d2ff;
-  background: #f1f7ff;
+  border-color: #b4cedf;
+  background: #eff6fa;
 }
 
 .activity-list {
@@ -975,8 +977,8 @@ textarea {
   gap: 10px;
   padding: 11px;
   border-radius: 10px;
-  border: 1px solid #dbe3f4;
-  background: #fbfcff;
+  border: 1px solid #d5dde5;
+  background: #f9fbfc;
 }
 
 .activity-item strong {
@@ -1201,15 +1203,15 @@ textarea {
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg-a: #0f1720;
-    --bg-b: #122333;
-    --bg-c: #15283f;
-    --card: rgba(15, 25, 40, 0.8);
-    --card-strong: #17273d;
-    --line: #2b3f5e;
-    --ink-1: #e8f0ff;
-    --ink-2: #b2c2de;
-    --ink-3: #95a7c6;
+    --bg-a: #111b22;
+    --bg-b: #172833;
+    --bg-c: #1c313c;
+    --card: rgba(16, 28, 36, 0.82);
+    --card-strong: #1d303c;
+    --line: #335163;
+    --ink-1: #e8f1f7;
+    --ink-2: #b7c8d5;
+    --ink-3: #97adbd;
   }
 
   input,
@@ -1235,15 +1237,15 @@ textarea {
   }
 
   .column-todo {
-    background: linear-gradient(180deg, rgba(125, 90, 239, 0.17), rgba(23, 40, 62, 0.9));
+    background: linear-gradient(180deg, rgba(77, 126, 166, 0.2), rgba(24, 41, 53, 0.92));
   }
 
   .column-in_progress {
-    background: linear-gradient(180deg, rgba(241, 139, 44, 0.17), rgba(23, 40, 62, 0.9));
+    background: linear-gradient(180deg, rgba(198, 127, 42, 0.21), rgba(24, 41, 53, 0.92));
   }
 
   .column-done {
-    background: linear-gradient(180deg, rgba(15, 157, 123, 0.17), rgba(23, 40, 62, 0.9));
+    background: linear-gradient(180deg, rgba(24, 130, 94, 0.22), rgba(24, 41, 53, 0.92));
   }
 
   .task p,
@@ -1261,8 +1263,8 @@ textarea {
   }
 
   .notif-prefs {
-    background: #1b2f4b;
-    border-color: #35527a;
+    background: #233947;
+    border-color: #426176;
   }
 
   .admin-inbox-head small {
@@ -1304,16 +1306,16 @@ textarea {
   }
 
   .notif-tabs button {
-    border-color: #35527a;
+    border-color: #426176;
     color: #d6e4ff;
-    background: linear-gradient(180deg, #203956, #1a2f49);
+    background: linear-gradient(180deg, #264152, #203746);
   }
 
   .task small,
   .shortcut-hint {
-    border-color: #35527a;
-    background: #1b3553;
-    color: #b9cae8;
+    border-color: #3c5a6f;
+    background: #244050;
+    color: #bfd1df;
   }
 
   .ghost-btn,
@@ -1321,20 +1323,20 @@ textarea {
   .task-btn,
   .comment-fab,
   .view-switch button {
-    border-color: #365276;
+    border-color: #426176;
     color: #d6e4ff;
-    background: linear-gradient(180deg, #203956, #1a2f49);
+    background: linear-gradient(180deg, #284253, #213846);
   }
 
   .toast {
-    background: #172a42;
-    border-color: #35527a;
-    color: #e3efff;
+    background: #213a49;
+    border-color: #426176;
+    color: #e0edf6;
   }
 
   .toast-info {
-    background: #1b3352;
-    border-color: #3f6496;
+    background: #264757;
+    border-color: #52738c;
   }
 }
 
