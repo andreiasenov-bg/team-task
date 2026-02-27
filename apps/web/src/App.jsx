@@ -111,6 +111,15 @@ const NOTIFICATION_TYPE_META = {
   "digest.daily.summary": { severity: "info", label: "Daily Digest" },
 };
 
+const QUICK_FILTER_PRESETS = [
+  { key: "all", label: "All Active", roles: ["admin", "manager", "employee"] },
+  { key: "focus", label: "Focus Now", roles: ["admin", "manager", "employee"] },
+  { key: "overdue", label: "Overdue", roles: ["admin", "manager", "employee"] },
+  { key: "mine", label: "My Tasks", roles: ["admin", "manager", "employee"] },
+  { key: "review", label: "Review Queue", roles: ["admin", "manager"] },
+  { key: "escalated", label: "SLA Escalated", roles: ["admin", "manager"] },
+];
+
 function getNotificationMeta(type) {
   const meta = NOTIFICATION_TYPE_META[String(type || "")];
   if (meta) return meta;
@@ -287,6 +296,7 @@ export default function App() {
   const [customSavedViews, setCustomSavedViews] = useLocalStorage("nexus_saved_views", []);
   const [savedViewName, setSavedViewName] = useState("");
   const [activeSavedViewId, setActiveSavedViewId] = useState("");
+  const [activeQuickFilter, setActiveQuickFilter] = useState("all");
   const [assistantSkills, setAssistantSkills] = useState([]);
   const [assistantApprovals, setAssistantApprovals] = useState([]);
   const [whatsappMetrics, setWhatsappMetrics] = useState(null);
@@ -386,6 +396,10 @@ export default function App() {
   const isPrivileged = canReview;
   const isEmployee = currentUser && currentUser.role === "employee";
   const userRole = currentUser && currentUser.role ? currentUser.role : "employee";
+  const quickFilters = useMemo(
+    () => QUICK_FILTER_PRESETS.filter((preset) => preset.roles.includes(userRole)),
+    [userRole]
+  );
 
   const availableSavedViews = useMemo(() => {
     const defaults = DEFAULT_SAVED_VIEWS.filter((view) => view.roles.includes(userRole));
@@ -777,6 +791,7 @@ export default function App() {
     setIncludeArchived(Boolean(f.includeArchived));
     if (!isEmployee) setAssigneeFilter(String(f.assigneeId || ""));
     setActiveSavedViewId(view.id);
+    setActiveQuickFilter("custom");
     setInfo(`View applied: ${view.label}`);
   }
 
@@ -813,6 +828,63 @@ export default function App() {
     setCustomSavedViews((curr) => (curr || []).filter((v) => v.id !== selected.id));
     setActiveSavedViewId("");
     setInfo(`View removed: ${selected.label}`);
+  }
+
+  function applyQuickFilter(presetKey) {
+    const key = String(presetKey || "all");
+    setActiveQuickFilter(key);
+    setActiveSavedViewId("");
+
+    if (key === "all") {
+      setSearch("");
+      setStatusFilter("");
+      setReviewFilter("");
+      setDueFilter("");
+      setSlaFilter("");
+      setIncludeArchived(false);
+      if (!isEmployee) setAssigneeFilter("");
+      return;
+    }
+    if (key === "focus") {
+      setStatusFilter("in_progress");
+      setReviewFilter("");
+      setDueFilter("week");
+      setSlaFilter("");
+      setIncludeArchived(false);
+      return;
+    }
+    if (key === "overdue") {
+      setStatusFilter("");
+      setReviewFilter("");
+      setDueFilter("overdue");
+      setSlaFilter("");
+      setIncludeArchived(false);
+      return;
+    }
+    if (key === "mine") {
+      setStatusFilter("");
+      setReviewFilter("");
+      setDueFilter("");
+      setSlaFilter("");
+      setIncludeArchived(false);
+      if (!isEmployee && currentUser) setAssigneeFilter(currentUser.id);
+      return;
+    }
+    if (key === "review") {
+      setStatusFilter("done");
+      setReviewFilter("pending");
+      setDueFilter("");
+      setSlaFilter("");
+      setIncludeArchived(false);
+      return;
+    }
+    if (key === "escalated") {
+      setStatusFilter("");
+      setReviewFilter("");
+      setDueFilter("");
+      setSlaFilter("sla_escalated");
+      setIncludeArchived(false);
+    }
   }
 
   async function onCreateTask(event) {
@@ -1176,6 +1248,7 @@ export default function App() {
   function applyNotifFocus(mode) {
     setViewMode("board");
     if (mode === "review_queue") {
+      setActiveQuickFilter("review");
       setStatusFilter("done");
       setReviewFilter("pending");
       setDueFilter("");
@@ -1186,6 +1259,7 @@ export default function App() {
       return;
     }
     if (mode === "sla_escalated") {
+      setActiveQuickFilter("escalated");
       setStatusFilter("");
       setReviewFilter("");
       setDueFilter("");
@@ -1525,6 +1599,25 @@ export default function App() {
         </div>
       </section>
 
+      <section className="card quick-filters">
+        <h2>Quick Filters</h2>
+        <div className="quick-filters-row">
+          {quickFilters.map((preset) => (
+            <button
+              key={preset.key}
+              type="button"
+              className={`ghost-btn ${activeQuickFilter === preset.key ? "active-chip" : ""}`}
+              onClick={() => applyQuickFilter(preset.key)}
+            >
+              {preset.label}
+            </button>
+          ))}
+          <button type="button" className={`ghost-btn ${activeQuickFilter === "custom" ? "active-chip" : ""}`} onClick={() => setActiveQuickFilter("custom")}>
+            Custom
+          </button>
+        </div>
+      </section>
+
       {isPrivileged ? (
         <section className="card sla-policy-admin">
           <h2>SLA Policy</h2>
@@ -1711,40 +1804,61 @@ export default function App() {
           ref={searchInputRef}
           placeholder="Search title/description"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => {
+            setActiveQuickFilter("custom");
+            setSearch(e.target.value);
+          }}
         />
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+        <select value={statusFilter} onChange={(e) => {
+          setActiveQuickFilter("custom");
+          setStatusFilter(e.target.value);
+        }}>
           <option value="">All status</option>
           <option value="todo">todo</option><option value="in_progress">in_progress</option><option value="done">done</option>
         </select>
-        <select value={reviewFilter} onChange={(e) => setReviewFilter(e.target.value)}>
+        <select value={reviewFilter} onChange={(e) => {
+          setActiveQuickFilter("custom");
+          setReviewFilter(e.target.value);
+        }}>
           <option value="">All review</option>
           <option value="pending">pending</option><option value="approved">approved</option><option value="rejected">rejected</option>
         </select>
         {isEmployee ? (
           <input value="Assignee: me" disabled />
         ) : (
-          <select value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)}>
+          <select value={assigneeFilter} onChange={(e) => {
+            setActiveQuickFilter("custom");
+            setAssigneeFilter(e.target.value);
+          }}>
             <option value="">All assignees</option>
             {members.map((member) => (
               <option key={member.id} value={member.id}>{member.name}</option>
             ))}
           </select>
         )}
-        <select value={dueFilter} onChange={(e) => setDueFilter(e.target.value)}>
+        <select value={dueFilter} onChange={(e) => {
+          setActiveQuickFilter("custom");
+          setDueFilter(e.target.value);
+        }}>
           <option value="">All due states</option>
           <option value="overdue">overdue</option>
           <option value="today">due today</option>
           <option value="week">due in 7d</option>
           <option value="none">no due date</option>
         </select>
-        <select value={slaFilter} onChange={(e) => setSlaFilter(e.target.value)}>
+        <select value={slaFilter} onChange={(e) => {
+          setActiveQuickFilter("custom");
+          setSlaFilter(e.target.value);
+        }}>
           <option value="">All SLA states</option>
           <option value="sla_overdue">sla overdue</option>
           <option value="sla_escalated">sla escalated</option>
         </select>
         <label className="archive-toggle">
-          <input type="checkbox" checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} /> Show archived
+          <input type="checkbox" checked={includeArchived} onChange={(e) => {
+            setActiveQuickFilter("custom");
+            setIncludeArchived(e.target.checked);
+          }} /> Show archived
         </label>
       </section>
 
