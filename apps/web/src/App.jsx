@@ -731,6 +731,7 @@ export default function App() {
   const [calendarEvents, setCalendarEvents] = useState([]);
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [calendarError, setCalendarError] = useState("");
+  const [focusedSection, setFocusedSection] = useState("");
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -771,6 +772,7 @@ export default function App() {
   const adminInboxRef = useRef(null);
   const boardSectionRef = useRef(null);
   const calendarSectionRef = useRef(null);
+  const focusTimeoutRef = useRef(null);
 
   const [taskForm, setTaskForm] = useState({
     title: "",
@@ -1270,6 +1272,12 @@ export default function App() {
   }, [isPrivileged]);
 
   useEffect(() => {
+    return () => {
+      if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
     updateViewUrl(viewMode, true);
   }, [viewMode]);
 
@@ -1437,25 +1445,36 @@ export default function App() {
     }
   }
 
-  function scrollToRef(ref) {
+  function focusSection(key) {
+    if (!key) return;
+    setFocusedSection(key);
+    if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
+    focusTimeoutRef.current = setTimeout(() => setFocusedSection(""), 1400);
+  }
+
+  function scrollToRef(ref, focusKey = "") {
     if (!ref || !ref.current) return;
+    const node = ref.current;
+    const runScroll = () => node.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (focusKey) focusSection(focusKey);
     requestAnimationFrame(() => {
-      ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      runScroll();
+      setTimeout(runScroll, 120);
     });
   }
 
   function onKpiNavigate(metricKey) {
-    switchView("board");
+    switchView("board", { closeNotifPanel: true, closeRejectDialog: true });
     setActiveSavedViewId("");
 
     if (metricKey === "active") {
       applyQuickFilter("all");
-      scrollToRef(filterBarRef);
+      scrollToRef(filterBarRef, "filter");
       return;
     }
     if (metricKey === "overdue") {
       applyQuickFilter("overdue");
-      scrollToRef(filterBarRef);
+      scrollToRef(filterBarRef, "filter");
       return;
     }
     if (metricKey === "pendingReviewLate") {
@@ -1467,9 +1486,9 @@ export default function App() {
       setIncludeArchived(false);
       if (!isEmployee) setAssigneeFilter("");
       if (isPrivileged) {
-        scrollToRef(adminInboxRef);
+        scrollToRef(adminInboxRef, "inbox");
       } else {
-        scrollToRef(filterBarRef);
+        scrollToRef(filterBarRef, "filter");
       }
       return;
     }
@@ -1481,15 +1500,15 @@ export default function App() {
       setSlaFilter("sla_overdue");
       setIncludeArchived(false);
       if (!isEmployee) setAssigneeFilter("");
-      scrollToRef(filterBarRef);
+      scrollToRef(filterBarRef, "filter");
       return;
     }
     if (metricKey === "slaEscalated") {
       applyQuickFilter("escalated");
       if (isPrivileged) {
-        scrollToRef(adminInboxRef);
+        scrollToRef(adminInboxRef, "inbox");
       } else {
-        scrollToRef(filterBarRef);
+        scrollToRef(filterBarRef, "filter");
       }
       return;
     }
@@ -1501,7 +1520,7 @@ export default function App() {
       setSlaFilter("");
       setIncludeArchived(true);
       if (!isEmployee) setAssigneeFilter("");
-      scrollToRef(filterBarRef);
+      scrollToRef(filterBarRef, "filter");
     }
   }
 
@@ -1592,6 +1611,7 @@ export default function App() {
   function onLogout() {
     setShowNotifPanel(false);
     setRejectDialog(null);
+    setFocusedSection("");
     setToken("");
   }
 
@@ -2247,7 +2267,7 @@ export default function App() {
       </section>
 
       {isPrivileged ? (
-        <section ref={adminInboxRef} className="card admin-inbox">
+        <section ref={adminInboxRef} className={`card admin-inbox ${focusedSection === "inbox" ? "section-focus" : ""}`}>
           <div className="admin-inbox-head">
             <h2>{t("adminInbox", "Admin Inbox")}</h2>
             <small>{t("adminInboxNote", "Fast action queue for review and escalations")}</small>
@@ -2540,7 +2560,7 @@ export default function App() {
         </section>
       ) : null}
 
-      <section ref={filterBarRef} className="card filter-bar">
+      <section ref={filterBarRef} className={`card filter-bar ${focusedSection === "filter" ? "section-focus" : ""}`}>
         <input
           ref={searchInputRef}
           placeholder={t("filterSearch", "Search title/description")}
