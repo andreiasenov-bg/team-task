@@ -130,6 +130,7 @@ const I18N = {
     signIn: "Вход",
     myTasks: "Моите задачи",
     boardControl: "Контрол на борда",
+    noProjects: "Няма проекти",
     projectsCount: "{count} проекта",
     signedInAs: "Влязъл като {name}",
     loading: "зареждане...",
@@ -311,8 +312,13 @@ const I18N = {
     month: "Месец",
     agenda: "Дневен ред",
     exportIcal: "Експорт iCal",
+    calendarLoading: "Зареждане на календара...",
+    calendarLoadFailed: "Календарът не можа да се зареди.",
     noEventsMonth: "Няма планирани събития за този месец.",
+    noProjectSelected: "Няма избран проект.",
+    noProjectSelectedHint: "Избери проект от горния панел, за да се заредят бордът и календарът.",
     moreCount: "+{count} още",
+    retry: "Опитай отново",
     activityTimeline: "Активност",
     activityNote: "Поток на промени по борда и ревю решения.",
     noDescription: "Няма описание",
@@ -663,6 +669,21 @@ function getMonthRange(offset = 0, locale) {
   return { from, to, title: base.toLocaleString(locale || undefined, { month: "long", year: "numeric" }) };
 }
 
+function normalizeViewMode(value) {
+  const next = String(value || "").toLowerCase();
+  if (next === "calendar") return "calendar";
+  return "board";
+}
+
+function getViewModeFromUrl() {
+  try {
+    const url = new URL(window.location.href);
+    return normalizeViewMode(url.searchParams.get("view"));
+  } catch {
+    return "board";
+  }
+}
+
 export default function App() {
   const [token, setToken] = useLocalStorage("nexus_token", "");
   const [density, setDensity] = useLocalStorage("nexus_density", "comfortable");
@@ -704,10 +725,12 @@ export default function App() {
     timezone_offset_minutes: new Date().getTimezoneOffset() * -1,
   });
 
-  const [viewMode, setViewMode] = useState("board");
+  const [viewMode, setViewMode] = useState(() => getViewModeFromUrl());
   const [calendarLayout, setCalendarLayout] = useState("grid");
   const [calendarMonthOffset, setCalendarMonthOffset] = useState(0);
   const [calendarEvents, setCalendarEvents] = useState([]);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [calendarError, setCalendarError] = useState("");
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -746,6 +769,8 @@ export default function App() {
   const searchInputRef = useRef(null);
   const filterBarRef = useRef(null);
   const adminInboxRef = useRef(null);
+  const boardSectionRef = useRef(null);
+  const calendarSectionRef = useRef(null);
 
   const [taskForm, setTaskForm] = useState({
     title: "",
@@ -823,6 +848,7 @@ export default function App() {
   const canReview = currentUser && ["admin", "manager"].includes(currentUser.role);
   const isPrivileged = canReview;
   const isEmployee = currentUser && currentUser.role === "employee";
+  const hasProject = Boolean(selectedProjectId);
   const userRole = currentUser && currentUser.role ? currentUser.role : "employee";
   const quickFilters = useMemo(
     () => QUICK_FILTER_PRESETS.filter((preset) => preset.roles.includes(userRole)),
@@ -838,6 +864,51 @@ export default function App() {
   }, [userRole, customSavedViews]);
 
   const monthRange = useMemo(() => getMonthRange(calendarMonthOffset, locale), [calendarMonthOffset, locale]);
+
+  function updateViewUrl(nextMode, replace = false) {
+    const mode = normalizeViewMode(nextMode);
+    const url = new URL(window.location.href);
+    if (mode === "board") {
+      url.searchParams.delete("view");
+    } else {
+      url.searchParams.set("view", mode);
+    }
+    const nextUrl = url.toString();
+    if (nextUrl === window.location.href) return;
+    if (replace) {
+      window.history.replaceState(null, "", nextUrl);
+      return;
+    }
+    window.history.pushState(null, "", nextUrl);
+  }
+
+  function scrollToView(mode) {
+    const targetRef = mode === "calendar" ? calendarSectionRef : boardSectionRef;
+    if (!targetRef.current) return;
+    requestAnimationFrame(() => {
+      targetRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  function switchView(nextMode, options = {}) {
+    const mode = normalizeViewMode(nextMode);
+    const config = {
+      replaceUrl: false,
+      scroll: false,
+      closeNotifPanel: false,
+      closeRejectDialog: false,
+      refreshCalendarNow: false,
+      ...options,
+    };
+    setViewMode(mode);
+    updateViewUrl(mode, config.replaceUrl);
+    if (config.closeNotifPanel) setShowNotifPanel(false);
+    if (config.closeRejectDialog) setRejectDialog(null);
+    if (config.scroll) scrollToView(mode);
+    if (mode === "calendar" && config.refreshCalendarNow) {
+      refreshCalendar().catch((e) => setError(e.message));
+    }
+  }
 
   const calendarGrouped = useMemo(() => {
     const map = new Map();
@@ -992,15 +1063,31 @@ export default function App() {
     setWhatsappQueue(queueData.queue || []);
   }
 
-  async function refreshCalendar() {
-    if (!token || !selectedProjectId) return;
-    const data = await listCalendarEvents(
-      token,
-      selectedProjectId,
-      monthRange.from.toISOString(),
-      monthRange.to.toISOString()
-    );
-    setCalendarEvents(data.events || []);
+  async function refreshCalendar(options = {}) {
+    const config = { silent: false, ...options };
+    if (!token || !selectedProjectId) {
+      setCalendarEvents([]);
+      setCalendarError("");
+      if (!config.silent) setCalendarLoading(false);
+      return;
+    }
+    if (!config.silent) setCalendarLoading(true);
+    setCalendarError("");
+    try {
+      const data = await listCalendarEvents(
+        token,
+        selectedProjectId,
+        monthRange.from.toISOString(),
+        monthRange.to.toISOString()
+      );
+      setCalendarEvents(data.events || []);
+    } catch (e) {
+      const message = e && e.message ? e.message : "Calendar refresh failed";
+      setCalendarError(message);
+      throw e;
+    } finally {
+      if (!config.silent) setCalendarLoading(false);
+    }
   }
 
   function pushToast(message, tone = "info") {
@@ -1065,7 +1152,7 @@ export default function App() {
   }, [token, selectedProjectId, filters]);
 
   useEffect(() => {
-    refreshCalendar().catch((e) => setError(e.message));
+    refreshCalendar({ silent: false }).catch((e) => setError(e.message));
   }, [token, selectedProjectId, monthRange.from.toISOString(), monthRange.to.toISOString()]);
 
   useEffect(() => {
@@ -1102,7 +1189,7 @@ export default function App() {
       refreshTasks().catch(() => {});
       refreshActivity().catch(() => {});
       refreshNotifications().catch(() => {});
-      refreshCalendar().catch(() => {});
+      refreshCalendar({ silent: true }).catch(() => {});
     };
 
     socket.on("project.created", ({ project }) => {
@@ -1179,6 +1266,27 @@ export default function App() {
   }, [currentUser]);
 
   useEffect(() => {
+    if (!isPrivileged) setRejectDialog(null);
+  }, [isPrivileged]);
+
+  useEffect(() => {
+    updateViewUrl(viewMode, true);
+  }, [viewMode]);
+
+  useEffect(() => {
+    function onPopState() {
+      setViewMode(getViewModeFromUrl());
+    }
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  useEffect(() => {
+    if (viewMode !== "calendar") return;
+    refreshCalendar({ silent: false }).catch((e) => setError(e.message));
+  }, [viewMode]);
+
+  useEffect(() => {
     function onKeyDown(event) {
       if (event.target && ["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)) {
         if (event.key !== "/") return;
@@ -1193,6 +1301,7 @@ export default function App() {
       }
       if (event.key.toLowerCase() === "b") setViewMode("board");
       if (event.key.toLowerCase() === "c") setViewMode("calendar");
+      if (event.key === "Escape") setRejectDialog(null);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -1201,6 +1310,7 @@ export default function App() {
   async function onLogin(event) {
     event.preventDefault();
     setError("");
+    setRejectDialog(null);
     try {
       const data = await login(authForm.email, authForm.password);
       setToken(data.token);
@@ -1335,7 +1445,7 @@ export default function App() {
   }
 
   function onKpiNavigate(metricKey) {
-    setViewMode("board");
+    switchView("board");
     setActiveSavedViewId("");
 
     if (metricKey === "active") {
@@ -1477,6 +1587,12 @@ export default function App() {
   function openRejectDialog(taskId, notificationId = "") {
     if (!isPrivileged || !taskId) return;
     setRejectDialog({ taskId, notificationId, comment: "" });
+  }
+
+  function onLogout() {
+    setShowNotifPanel(false);
+    setRejectDialog(null);
+    setToken("");
   }
 
   async function submitRejectDialog() {
@@ -1717,7 +1833,7 @@ export default function App() {
 
     const nextSearch = taskTitle || "";
     const nextStatus = ["todo", "in_progress", "done"].includes(taskStatus) ? taskStatus : "";
-    setViewMode("board");
+    switchView("board");
     setSearch(nextSearch);
     setStatusFilter(nextStatus);
     setReviewFilter("");
@@ -1784,7 +1900,7 @@ export default function App() {
   }
 
   function applyNotifFocus(mode) {
-    setViewMode("board");
+    switchView("board");
     if (mode === "review_queue") {
       setActiveQuickFilter("review");
       setStatusFilter("done");
@@ -1958,14 +2074,15 @@ export default function App() {
         </div>
         <div className="topbar-actions">
           <div className="topbar-row">
-            <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)}>
+            <select value={selectedProjectId} onChange={(e) => setSelectedProjectId(e.target.value)} disabled={projects.length === 0}>
+              {projects.length === 0 ? <option value="">{t("noProjects", "No projects")}</option> : null}
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>{p.title}</option>
               ))}
             </select>
             <div className="view-switch">
-              <button type="button" onClick={() => setViewMode("board")} className={viewMode === "board" ? "active" : ""}>{t("board", "Board")}</button>
-              <button type="button" onClick={() => setViewMode("calendar")} className={viewMode === "calendar" ? "active" : ""}>{t("calendar", "Calendar")}</button>
+              <button type="button" onClick={() => switchView("board", { scroll: true, closeNotifPanel: true })} className={viewMode === "board" ? "active" : ""}>{t("board", "Board")}</button>
+              <button type="button" onClick={() => switchView("calendar", { scroll: true, closeNotifPanel: true, closeRejectDialog: true })} className={viewMode === "calendar" ? "active" : ""}>{t("calendar", "Calendar")}</button>
             </div>
             <div className="view-switch lang-switch">
               <button type="button" className={lang === "bg" ? "active" : ""} onClick={() => setUiLang("bg")}>BG</button>
@@ -1983,7 +2100,7 @@ export default function App() {
               {t("density", "Density: {value}", { value: t(density, density) })}
             </button>
             <button type="button" className="ghost-btn" onClick={() => setShowNotifPanel((x) => !x)}>{t("notifications", "Notifications")} ({notifUnread})</button>
-            <button type="button" className="danger-btn" onClick={() => setToken("")}>{t("logout", "Logout")}</button>
+            <button type="button" className="danger-btn" onClick={onLogout}>{t("logout", "Logout")}</button>
           </div>
           {showNotifPanel ? (
             <div className="notif-panel card">
@@ -2702,76 +2819,83 @@ export default function App() {
       ) : null}
 
       {viewMode === "board" ? (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCorners}
-          onDragStart={(event) => setActiveTaskId(String(event.active.id).replace("task:", ""))}
-          onDragCancel={() => setActiveTaskId("")}
-          onDragEnd={onDragEnd}
-        >
-          <section className="board">
-            {STATUS.map((column) => (
-              <KanbanColumn
-                key={column.key}
-                statusKey={column.key}
-                title={statusLabel(column.key, t)}
-                tasks={grouped[column.key]}
-                onMove={onMove}
-                onApprove={onApprove}
-                onReject={onReject}
-                onArchive={onArchive}
-                onUpdateSchedule={onUpdateSchedule}
-                canReview={canReview}
-                memberNameById={memberNameById}
-                t={t}
-                locale={locale}
-                openCommentTaskId={openCommentTaskId}
-                commentsByTask={commentsByTask}
-                attachmentsByTask={attachmentsByTask}
-                commentDraftByTask={commentDraftByTask}
-                attachmentDraftByTask={attachmentDraftByTask}
-                setCommentDraftByTask={setCommentDraftByTask}
-                setAttachmentDraftByTask={setAttachmentDraftByTask}
-                toggleComments={toggleComments}
-                submitComment={submitComment}
-                submitAttachment={submitAttachment}
-                removeAttachment={removeAttachment}
-                onCopyTaskLink={copyTaskLink}
-              />
-            ))}
+        hasProject ? (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragStart={(event) => setActiveTaskId(String(event.active.id).replace("task:", ""))}
+            onDragCancel={() => setActiveTaskId("")}
+            onDragEnd={onDragEnd}
+          >
+            <section ref={boardSectionRef} id="board-view" className="board">
+              {STATUS.map((column) => (
+                <KanbanColumn
+                  key={column.key}
+                  statusKey={column.key}
+                  title={statusLabel(column.key, t)}
+                  tasks={grouped[column.key]}
+                  onMove={onMove}
+                  onApprove={onApprove}
+                  onReject={onReject}
+                  onArchive={onArchive}
+                  onUpdateSchedule={onUpdateSchedule}
+                  canReview={canReview}
+                  memberNameById={memberNameById}
+                  t={t}
+                  locale={locale}
+                  openCommentTaskId={openCommentTaskId}
+                  commentsByTask={commentsByTask}
+                  attachmentsByTask={attachmentsByTask}
+                  commentDraftByTask={commentDraftByTask}
+                  attachmentDraftByTask={attachmentDraftByTask}
+                  setCommentDraftByTask={setCommentDraftByTask}
+                  setAttachmentDraftByTask={setAttachmentDraftByTask}
+                  toggleComments={toggleComments}
+                  submitComment={submitComment}
+                  submitAttachment={submitAttachment}
+                  removeAttachment={removeAttachment}
+                  onCopyTaskLink={copyTaskLink}
+                />
+              ))}
+            </section>
+            <DragOverlay>
+              {activeTask ? (
+                <TaskCard
+                  task={activeTask}
+                  onMove={onMove}
+                  onApprove={onApprove}
+                  onReject={onReject}
+                  onArchive={onArchive}
+                  onUpdateSchedule={onUpdateSchedule}
+                  canReview={canReview}
+                  isOverlay
+                  memberNameById={memberNameById}
+                  isCommentsOpen={false}
+                  comments={[]}
+                  attachments={[]}
+                  draft={""}
+                  attachmentDraft={{ fileName: "", fileUrl: "", fileObject: null }}
+                  onDraftChange={() => {}}
+                  onAttachmentDraftChange={() => {}}
+                  onToggleComments={() => {}}
+                  onSubmitComment={() => {}}
+                  onSubmitAttachment={() => {}}
+                  onRemoveAttachment={() => {}}
+                  onCopyTaskLink={() => {}}
+                  t={t}
+                  locale={locale}
+                />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        ) : (
+          <section ref={boardSectionRef} id="board-view" className="card board-empty">
+            <h3>{t("noProjectSelected", "No project selected.")}</h3>
+            <p className="section-note">{t("noProjectSelectedHint", "Select a project from the top bar to load board and calendar data.")}</p>
           </section>
-          <DragOverlay>
-            {activeTask ? (
-              <TaskCard
-                task={activeTask}
-                onMove={onMove}
-                onApprove={onApprove}
-                onReject={onReject}
-                onArchive={onArchive}
-                onUpdateSchedule={onUpdateSchedule}
-                canReview={canReview}
-                isOverlay
-                memberNameById={memberNameById}
-                isCommentsOpen={false}
-                comments={[]}
-                attachments={[]}
-                draft={""}
-                attachmentDraft={{ fileName: "", fileUrl: "", fileObject: null }}
-                onDraftChange={() => {}}
-                onAttachmentDraftChange={() => {}}
-                onToggleComments={() => {}}
-                onSubmitComment={() => {}}
-                onSubmitAttachment={() => {}}
-                onRemoveAttachment={() => {}}
-                onCopyTaskLink={() => {}}
-                t={t}
-                locale={locale}
-              />
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+        )
       ) : (
-        <section className="card calendar-panel">
+        <section ref={calendarSectionRef} id="calendar-view" className="card calendar-panel">
           <div className="calendar-toolbar">
             <button type="button" onClick={() => setCalendarMonthOffset((x) => x - 1)}>{t("prev", "Prev")}</button>
             <strong>{monthRange.title}</strong>
@@ -2780,9 +2904,20 @@ export default function App() {
               <button type="button" onClick={() => setCalendarLayout("grid")} className={calendarLayout === "grid" ? "active" : ""}>{t("month", "Month")}</button>
               <button type="button" onClick={() => setCalendarLayout("agenda")} className={calendarLayout === "agenda" ? "active" : ""}>{t("agenda", "Agenda")}</button>
             </div>
-            <button type="button" onClick={onExportIcs}>{t("exportIcal", "Export iCal")}</button>
+            <button type="button" onClick={onExportIcs} disabled={!hasProject}>{t("exportIcal", "Export iCal")}</button>
           </div>
-          {calendarLayout === "grid" ? (
+          {!hasProject ? (
+            <p className="section-note">{t("noProjectSelectedHint", "Select a project from the top bar to load board and calendar data.")}</p>
+          ) : calendarLoading ? (
+            <p className="section-note">{t("calendarLoading", "Loading calendar...")}</p>
+          ) : calendarError ? (
+            <div className="calendar-error">
+              <p>{t("calendarLoadFailed", "Calendar failed to load.")} {calendarError}</p>
+              <button type="button" className="secondary-btn" onClick={() => refreshCalendar().catch((e) => setError(e.message))}>
+                {t("retry", "Retry")}
+              </button>
+            </div>
+          ) : calendarLayout === "grid" ? (
             <div className="calendar-month-grid">
               {["sun", "mon", "tue", "wed", "thu", "fri", "sat"].map((d) => (
                 <div key={d} className="calendar-weekday">{weekdayLabel(d, t)}</div>
@@ -2839,7 +2974,7 @@ export default function App() {
         </div>
       </section>
 
-      {rejectDialog ? (
+      {rejectDialog && isPrivileged ? (
         <div className="modal-backdrop" role="presentation" onClick={() => setRejectDialog(null)}>
           <section className="card modal-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
             <h3>{t("rejectTitle", "Reject task")}</h3>

@@ -863,6 +863,10 @@ button:active {
   padding-bottom: 6px;
 }
 
+.board-empty {
+  margin-top: 16px;
+}
+
 .column {
   flex: 0 0 320px;
   border: 1px solid #d6dde6;
@@ -1332,6 +1336,21 @@ textarea {
 
 .calendar-panel {
   margin-top: 16px;
+}
+
+.calendar-error {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid #f3c9c6;
+  background: #fff4f3;
+  color: #7d312b;
+  display: grid;
+  gap: 8px;
+}
+
+.calendar-error p {
+  margin: 0;
 }
 
 .calendar-toolbar {
