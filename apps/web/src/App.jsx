@@ -301,6 +301,11 @@ const I18N = {
     noExtraRule: "няма допълнително правило",
     saveSchedule: "Запази график",
     cancel: "Откажи",
+    rejectTitle: "Връщане на задача",
+    rejectHint: "Можеш да върнеш и без коментар.",
+    rejectCommentLabel: "Коментар (по желание)",
+    rejectCommentPlaceholder: "Напиши причина за връщане...",
+    rejectSubmit: "Потвърди връщане",
     prev: "Назад",
     next: "Напред",
     month: "Месец",
@@ -758,6 +763,7 @@ export default function App() {
     recurrenceEndAt: "",
   });
   const [scheduleEditor, setScheduleEditor] = useState(null);
+  const [rejectDialog, setRejectDialog] = useState(null);
   const [pendingTaskDeepLinkId, setPendingTaskDeepLinkId] = useState("");
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
@@ -1464,11 +1470,24 @@ export default function App() {
     }
   }
 
-  async function onReject(taskId) {
+  function onReject(taskId) {
+    openRejectDialog(taskId, "");
+  }
+
+  function openRejectDialog(taskId, notificationId = "") {
+    if (!isPrivileged || !taskId) return;
+    setRejectDialog({ taskId, notificationId, comment: "" });
+  }
+
+  async function submitRejectDialog() {
+    if (!rejectDialog || !isPrivileged) return;
     try {
-      const comment = window.prompt(t("reviewRejectPrompt", "Comment for rejection (optional)"), "") || "";
-      await reviewTask(token, taskId, "reject", comment);
+      const comment = String(rejectDialog.comment || "").trim();
+      await reviewTask(token, rejectDialog.taskId, "reject", comment);
+      if (rejectDialog.notificationId) await onReadNotification(rejectDialog.notificationId);
       await refreshTasks();
+      setRejectDialog(null);
+      pushToast(t("taskRejected", "Task rejected"), "info");
     } catch (e) {
       setError(e.message);
     }
@@ -1761,15 +1780,7 @@ export default function App() {
   async function rejectTaskFromNotification(notification) {
     const taskId = notification && notification.task_id ? String(notification.task_id) : "";
     if (!taskId || !isPrivileged) return;
-    const comment = window.prompt(t("reviewRejectPrompt", "Comment for rejection (optional)"), "") || "";
-    try {
-      await reviewTask(token, taskId, "reject", comment);
-      await onReadNotification(notification.id);
-      await refreshTasks();
-      pushToast(t("taskRejected", "Task rejected"), "info");
-    } catch (e) {
-      setError(e.message);
-    }
+    openRejectDialog(taskId, notification.id);
   }
 
   function applyNotifFocus(mode) {
@@ -2827,6 +2838,25 @@ export default function App() {
           ))}
         </div>
       </section>
+
+      {rejectDialog ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setRejectDialog(null)}>
+          <section className="card modal-card" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <h3>{t("rejectTitle", "Reject task")}</h3>
+            <p className="section-note">{t("rejectHint", "You can reject with no comment.")}</p>
+            <label>{t("rejectCommentLabel", "Comment (optional)")}</label>
+            <textarea
+              placeholder={t("rejectCommentPlaceholder", "Write rejection reason...")}
+              value={rejectDialog.comment}
+              onChange={(e) => setRejectDialog((curr) => (curr ? { ...curr, comment: e.target.value } : curr))}
+            />
+            <div className="modal-actions">
+              <button type="button" className="danger-btn" onClick={submitRejectDialog}>{t("rejectSubmit", "Confirm reject")}</button>
+              <button type="button" className="ghost-btn" onClick={() => setRejectDialog(null)}>{t("cancel", "Cancel")}</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
 
       {info ? <p className="info">{info}</p> : null}
       {error ? <p className="error">{error}</p> : null}
