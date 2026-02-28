@@ -136,6 +136,8 @@ const I18N = {
     loading: "зареждане...",
     shortcuts: "Бързи клавиши: N нова задача, / търсене, B борд, C календар",
     density: "Плътност: {value}",
+    showTools: "Покажи инструменти",
+    hideTools: "Скрий инструменти",
     comfortable: "нормална",
     compact: "компактна",
     notifications: "Известия",
@@ -145,6 +147,10 @@ const I18N = {
     logout: "Изход",
     board: "Борд",
     calendar: "Календар",
+    tabWork: "Работа",
+    tabInbox: "Входящи",
+    tabOps: "Операции",
+    tabActivity: "Активност",
     unread: "непрочетени",
     critical: "критични",
     review: "за ревю",
@@ -726,6 +732,8 @@ export default function App() {
   });
 
   const [viewMode, setViewMode] = useState(() => getViewModeFromUrl());
+  const [mainSection, setMainSection] = useState("work");
+  const [showWorkTools, setShowWorkTools] = useState(false);
   const [calendarLayout, setCalendarLayout] = useState("grid");
   const [calendarMonthOffset, setCalendarMonthOffset] = useState(0);
   const [calendarEvents, setCalendarEvents] = useState([]);
@@ -856,6 +864,13 @@ export default function App() {
     () => QUICK_FILTER_PRESETS.filter((preset) => preset.roles.includes(userRole)),
     [userRole]
   );
+  const sectionTabs = useMemo(() => {
+    const tabs = [{ key: "work", label: t("tabWork", "Workspace") }];
+    if (isPrivileged) tabs.push({ key: "inbox", label: t("tabInbox", "Inbox") });
+    if (isPrivileged) tabs.push({ key: "ops", label: t("tabOps", "Operations") });
+    tabs.push({ key: "activity", label: t("tabActivity", "Activity") });
+    return tabs;
+  }, [isPrivileged, lang]);
 
   const availableSavedViews = useMemo(() => {
     const defaults = DEFAULT_SAVED_VIEWS.filter((view) => view.roles.includes(userRole));
@@ -1272,6 +1287,12 @@ export default function App() {
   }, [isPrivileged]);
 
   useEffect(() => {
+    if (!isPrivileged && (mainSection === "inbox" || mainSection === "ops")) {
+      setMainSection("work");
+    }
+  }, [isPrivileged, mainSection]);
+
+  useEffect(() => {
     return () => {
       if (focusTimeoutRef.current) clearTimeout(focusTimeoutRef.current);
     };
@@ -1307,8 +1328,14 @@ export default function App() {
         event.preventDefault();
         searchInputRef.current?.focus();
       }
-      if (event.key.toLowerCase() === "b") setViewMode("board");
-      if (event.key.toLowerCase() === "c") setViewMode("calendar");
+      if (event.key.toLowerCase() === "b") {
+        setMainSection("work");
+        setViewMode("board");
+      }
+      if (event.key.toLowerCase() === "c") {
+        setMainSection("work");
+        setViewMode("calendar");
+      }
       if (event.key === "Escape") setRejectDialog(null);
     }
     window.addEventListener("keydown", onKeyDown);
@@ -1465,6 +1492,7 @@ export default function App() {
 
   function onKpiNavigate(metricKey) {
     switchView("board", { closeNotifPanel: true, closeRejectDialog: true });
+    setMainSection("work");
     setActiveSavedViewId("");
 
     if (metricKey === "active") {
@@ -1486,6 +1514,7 @@ export default function App() {
       setIncludeArchived(false);
       if (!isEmployee) setAssigneeFilter("");
       if (isPrivileged) {
+        setMainSection("inbox");
         scrollToRef(adminInboxRef, "inbox");
       } else {
         scrollToRef(filterBarRef, "filter");
@@ -1506,6 +1535,7 @@ export default function App() {
     if (metricKey === "slaEscalated") {
       applyQuickFilter("escalated");
       if (isPrivileged) {
+        setMainSection("inbox");
         scrollToRef(adminInboxRef, "inbox");
       } else {
         scrollToRef(filterBarRef, "filter");
@@ -1612,6 +1642,8 @@ export default function App() {
     setShowNotifPanel(false);
     setRejectDialog(null);
     setFocusedSection("");
+    setMainSection("work");
+    setShowWorkTools(false);
     setToken("");
   }
 
@@ -1854,6 +1886,7 @@ export default function App() {
     const nextSearch = taskTitle || "";
     const nextStatus = ["todo", "in_progress", "done"].includes(taskStatus) ? taskStatus : "";
     switchView("board");
+    setMainSection("work");
     setSearch(nextSearch);
     setStatusFilter(nextStatus);
     setReviewFilter("");
@@ -1921,6 +1954,7 @@ export default function App() {
 
   function applyNotifFocus(mode) {
     switchView("board");
+    setMainSection("work");
     if (mode === "review_queue") {
       setActiveQuickFilter("review");
       setStatusFilter("done");
@@ -1929,6 +1963,7 @@ export default function App() {
       setSlaFilter("");
       setNotifTab("critical");
       setShowNotifPanel(false);
+      if (isPrivileged) setMainSection("inbox");
       pushToast(t("openedReviewQueue", "Opened review queue"), "info");
       return;
     }
@@ -1940,6 +1975,7 @@ export default function App() {
       setSlaFilter("sla_escalated");
       setNotifTab("critical");
       setShowNotifPanel(false);
+      if (isPrivileged) setMainSection("inbox");
       pushToast(t("openedSlaEscalations", "Opened SLA escalations"), "info");
     }
   }
@@ -2101,8 +2137,8 @@ export default function App() {
               ))}
             </select>
             <div className="view-switch">
-              <button type="button" onClick={() => switchView("board", { scroll: true, closeNotifPanel: true })} className={viewMode === "board" ? "active" : ""}>{t("board", "Board")}</button>
-              <button type="button" onClick={() => switchView("calendar", { scroll: true, closeNotifPanel: true, closeRejectDialog: true })} className={viewMode === "calendar" ? "active" : ""}>{t("calendar", "Calendar")}</button>
+              <button type="button" onClick={() => { setMainSection("work"); switchView("board", { scroll: true, closeNotifPanel: true }); }} className={viewMode === "board" ? "active" : ""}>{t("board", "Board")}</button>
+              <button type="button" onClick={() => { setMainSection("work"); switchView("calendar", { scroll: true, closeNotifPanel: true, closeRejectDialog: true }); }} className={viewMode === "calendar" ? "active" : ""}>{t("calendar", "Calendar")}</button>
             </div>
             <div className="view-switch lang-switch">
               <button type="button" className={lang === "bg" ? "active" : ""} onClick={() => setUiLang("bg")}>BG</button>
@@ -2119,6 +2155,13 @@ export default function App() {
             <button type="button" className="ghost-btn" onClick={() => setDensity((x) => (x === "comfortable" ? "compact" : "comfortable"))}>
               {t("density", "Density: {value}", { value: t(density, density) })}
             </button>
+            {mainSection === "work" ? (
+              <button type="button" className="ghost-btn" onClick={() => setShowWorkTools((x) => !x)}>
+                {showWorkTools ? t("hideTools", "Hide tools") : t("showTools", "Show tools")}
+              </button>
+            ) : (
+              <button type="button" className="ghost-btn is-placeholder" disabled aria-hidden="true">&nbsp;</button>
+            )}
             <button type="button" className="ghost-btn" onClick={() => setShowNotifPanel((x) => !x)}>{t("notifications", "Notifications")} ({notifUnread})</button>
             <button type="button" className="danger-btn" onClick={onLogout}>{t("logout", "Logout")}</button>
           </div>
@@ -2237,6 +2280,20 @@ export default function App() {
         </div>
       </header>
 
+      <section className="card section-tabs" aria-label={t("tabWork", "Workspace")}>
+        {sectionTabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            className={`ghost-btn ${mainSection === tab.key ? "active-chip" : ""}`}
+            onClick={() => setMainSection(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </section>
+
+      {mainSection !== "ops" ? (
       <section className="kpi-grid">
         {[
           { key: "active", label: t("kpiActive", "Active"), value: kpis.active },
@@ -2265,8 +2322,9 @@ export default function App() {
           </article>
         ))}
       </section>
+      ) : null}
 
-      {isPrivileged ? (
+      {isPrivileged && mainSection === "inbox" ? (
         <section ref={adminInboxRef} className={`card admin-inbox ${focusedSection === "inbox" ? "section-focus" : ""}`}>
           <div className="admin-inbox-head">
             <h2>{t("adminInbox", "Admin Inbox")}</h2>
@@ -2308,6 +2366,7 @@ export default function App() {
         </section>
       ) : null}
 
+      {mainSection === "work" && showWorkTools ? (
       <section className="card saved-views">
         <h2>{t("savedViews", "Saved Views")}</h2>
         <div className="saved-views-row">
@@ -2328,7 +2387,9 @@ export default function App() {
           <button type="button" className="ghost-btn" onClick={deleteActiveCustomView}>{t("deleteView", "Delete view")}</button>
         </div>
       </section>
+      ) : null}
 
+      {mainSection === "work" && showWorkTools ? (
       <section className="card quick-filters">
         <h2>{t("quickFilters", "Quick Filters")}</h2>
         <div className="quick-filters-row">
@@ -2347,8 +2408,9 @@ export default function App() {
           </button>
         </div>
       </section>
+      ) : null}
 
-      {isPrivileged ? (
+      {isPrivileged && mainSection === "ops" ? (
         <section className="card sla-policy-admin">
           <h2>{t("slaPolicy", "SLA Policy")}</h2>
           <p className="section-note">{t("slaPolicyNote", "Live settings for reminder cadence. Changes apply without API restart.")}</p>
@@ -2418,7 +2480,7 @@ export default function App() {
         </section>
       ) : null}
 
-      {isPrivileged ? (
+      {isPrivileged && mainSection === "ops" ? (
         <section className="card assistant-admin">
           <h2>{t("assistantSkillsAdmin", "Assistant Skills Admin")}</h2>
           <p className="section-note">{t("assistantSkillsNote", "Create dynamic SQL skills and approve pending access requests.")}</p>
@@ -2481,7 +2543,7 @@ export default function App() {
         </section>
       ) : null}
 
-      {isPrivileged ? (
+      {isPrivileged && mainSection === "ops" ? (
         <section className="card assistant-admin">
           <h2>{t("whatsappQueue", "WhatsApp Delivery Queue")}</h2>
           <p className="section-note">{t("whatsappQueueNote", "Monitor outbound retries and manually requeue failed messages.")}</p>
@@ -2560,6 +2622,7 @@ export default function App() {
         </section>
       ) : null}
 
+      {mainSection === "work" ? (
       <section ref={filterBarRef} className={`card filter-bar ${focusedSection === "filter" ? "section-focus" : ""}`}>
         <input
           ref={searchInputRef}
@@ -2623,7 +2686,9 @@ export default function App() {
           }} /> {t("showArchived", "Show archived")}
         </label>
       </section>
+      ) : null}
 
+      {mainSection === "work" ? (
       <section className="card composer">
         <h2>{t("quickAddTask", "Quick add task")}</h2>
         <p className="section-note">{isEmployee ? t("employeeComposerNote", "Create and track only your own tasks.") : t("managerComposerNote", "Set assignee, due date and schedule in one flow.")}</p>
@@ -2735,8 +2800,9 @@ export default function App() {
           )}
         </form>
       </section>
+      ) : null}
 
-      {scheduleEditor ? (
+      {mainSection === "work" && scheduleEditor ? (
         <section className="card schedule-editor">
           <h3>{t("scheduleTask", "Schedule task: {title}", { title: scheduleEditor.title })}</h3>
           <div className="schedule-grid">
@@ -2838,7 +2904,8 @@ export default function App() {
         </section>
       ) : null}
 
-      {viewMode === "board" ? (
+      {mainSection === "work" ? (
+      viewMode === "board" ? (
         hasProject ? (
           <DndContext
             sensors={sensors}
@@ -2978,8 +3045,9 @@ export default function App() {
             </div>
           )}
         </section>
-      )}
+      ) : null}
 
+      {mainSection === "activity" ? (
       <section className="card activity">
         <h2>{t("activityTimeline", "Activity Timeline")}</h2>
         <p className="section-note">{t("activityNote", "Live stream of board changes and review decisions.")}</p>
@@ -2993,6 +3061,7 @@ export default function App() {
           ))}
         </div>
       </section>
+      ) : null}
 
       {rejectDialog && isPrivileged ? (
         <div className="modal-backdrop" role="presentation" onClick={() => setRejectDialog(null)}>
