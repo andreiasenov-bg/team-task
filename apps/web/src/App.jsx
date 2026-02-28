@@ -19,6 +19,7 @@ import {
   createTask,
   deleteTaskAttachment,
   decideAssistantSkillApproval,
+  downloadTaskAttachment,
   downloadCalendarIcs,
   getNotificationPreferences,
   getSlaPolicy,
@@ -352,6 +353,9 @@ const I18N = {
     noAttachments: "Още няма прикачени файлове.",
     attachmentAdded: "Добавен е прикачен файл",
     attachmentRemoved: "Премахнат е прикачен файл",
+    download: "Свали",
+    downloadFailed: "Неуспешно сваляне на файла",
+    dragTask: "Премести задача",
     remove: "Премахни",
     fileNameOptional: "Име на файл (по желание)",
     fileUrlOptional: "https://file-url (по желание)",
@@ -1796,6 +1800,32 @@ export default function App() {
     }
   }
 
+  async function downloadAttachment(taskId, attachment) {
+    if (!attachment || !attachment.id) return;
+    try {
+      const { blob, fileName } = await downloadTaskAttachment(token, taskId, attachment.id);
+      const finalName = String(fileName || attachment.file_name || "attachment").trim() || "attachment";
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = finalName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    } catch (e) {
+      const fallbackUrl = String(attachment.file_url || "").trim();
+      if (fallbackUrl) {
+        try {
+          window.open(fallbackUrl, "_blank", "noopener,noreferrer");
+        } catch {
+          // Ignore fallback open errors.
+        }
+      }
+      setError(e.message || t("downloadFailed", "Failed to download attachment"));
+    }
+  }
+
   async function onDragEnd(event) {
     setActiveTaskId("");
     const { active, over } = event;
@@ -2940,6 +2970,7 @@ export default function App() {
                   submitComment={submitComment}
                   submitAttachment={submitAttachment}
                   removeAttachment={removeAttachment}
+                  downloadAttachment={downloadAttachment}
                   onCopyTaskLink={copyTaskLink}
                 />
               ))}
@@ -2967,6 +2998,7 @@ export default function App() {
                   onSubmitComment={() => {}}
                   onSubmitAttachment={() => {}}
                   onRemoveAttachment={() => {}}
+                  onDownloadAttachment={() => {}}
                   onCopyTaskLink={() => {}}
                   t={t}
                   locale={locale}
@@ -3118,6 +3150,7 @@ function KanbanColumn({
   submitComment,
   submitAttachment,
   removeAttachment,
+  downloadAttachment,
   onCopyTaskLink,
   t = (key, fallback) => fallback || key,
   locale,
@@ -3153,6 +3186,7 @@ function KanbanColumn({
             onSubmitComment={() => submitComment(task.id)}
             onSubmitAttachment={() => submitAttachment(task.id)}
             onRemoveAttachment={(attachmentId) => removeAttachment(task.id, attachmentId)}
+            onDownloadAttachment={(attachment) => downloadAttachment(task.id, attachment)}
             onCopyTaskLink={() => onCopyTaskLink(task)}
           />
         ))}
@@ -3182,19 +3216,34 @@ function TaskCard({
   onSubmitComment,
   onSubmitAttachment,
   onRemoveAttachment,
+  onDownloadAttachment,
   onCopyTaskLink,
   t = (key, fallback) => fallback || key,
   locale,
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: `task:${task.id}` });
+  const dragHandleProps = isOverlay ? {} : { ...attributes, ...listeners };
   const style = {
     transform: transform ? `translate3d(${transform.x}px, ${transform.y}px, 0)` : undefined,
     opacity: isDragging && !isOverlay ? 0.4 : 1,
   };
 
   return (
-    <div ref={setNodeRef} style={style} className={`task ${isOverlay ? "task-overlay" : ""}`} {...attributes} {...listeners}>
-      <strong>{task.title}</strong>
+    <div ref={setNodeRef} style={style} className={`task ${isOverlay ? "task-overlay" : ""}`}>
+      <div className="task-headline">
+        <strong>{task.title}</strong>
+        {!isOverlay ? (
+          <button
+            type="button"
+            className="drag-handle"
+            aria-label={t("dragTask", "Drag task")}
+            title={t("dragTask", "Drag task")}
+            {...dragHandleProps}
+          >
+            ::
+          </button>
+        ) : null}
+      </div>
       <p>{task.description || t("noDescription", "No description")}</p>
       <small>{t("priority", "priority")}: {priorityLabel(task.priority, t)}</small>
       <small>{t("assignee", "assignee")}: {task.assigned_to ? memberNameById[task.assigned_to] || t("unknown", "Unknown") : t("unassigned", "Unassigned")}</small>
@@ -3255,37 +3304,65 @@ function TaskCard({
             {comments.length === 0 ? <p>{t("noComments", "No comments yet.")}</p> : null}
           </div>
           <textarea placeholder={task.status === "done" ? t("doneCommentHint", "Describe what was completed...") : t("addCommentHint", "Add comment...")} value={draft} onChange={(e) => onDraftChange(e.target.value)} />
-          <button type="button" onClick={onSubmitComment}>{t("postComment", "Post comment")}</button>
+          <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={onSubmitComment}>{t("postComment", "Post comment")}</button>
 
           <h4>{t("attachments", "Attachments")}</h4>
           <div className="attachment-list">
             {attachments.map((attachment) => (
               <div className="attachment-item" key={attachment.id}>
-                <a href={attachment.file_url} target="_blank" rel="noreferrer">{attachment.file_name}</a>
-                <button type="button" className="task-btn task-btn-muted" onClick={() => onRemoveAttachment(attachment.id)}>{t("remove", "Remove")}</button>
+                <button
+                  type="button"
+                  className="attachment-link"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={() => onDownloadAttachment(attachment)}
+                  title={attachment.file_name}
+                >
+                  {attachment.file_name}
+                </button>
+                <div className="attachment-item-actions">
+                  <button
+                    type="button"
+                    className="task-btn task-btn-muted"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => onDownloadAttachment(attachment)}
+                  >
+                    {t("download", "Download")}
+                  </button>
+                  <button
+                    type="button"
+                    className="task-btn task-btn-muted"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => onRemoveAttachment(attachment.id)}
+                  >
+                    {t("remove", "Remove")}
+                  </button>
+                </div>
               </div>
             ))}
             {attachments.length === 0 ? <p>{t("noAttachments", "No attachments yet.")}</p> : null}
           </div>
           <div className="attachment-form">
             <input
+              onPointerDown={(e) => e.stopPropagation()}
               placeholder={t("fileNameOptional", "File name (optional)")}
               value={attachmentDraft.fileName || ""}
               onChange={(e) => onAttachmentDraftChange({ fileName: e.target.value })}
             />
             <input
               type="file"
+              onPointerDown={(e) => e.stopPropagation()}
               onChange={(e) => {
                 const nextFile = e.target.files && e.target.files[0] ? e.target.files[0] : null;
                 onAttachmentDraftChange({ fileObject: nextFile });
               }}
             />
             <input
+              onPointerDown={(e) => e.stopPropagation()}
               placeholder={t("fileUrlOptional", "https://file-url (optional)")}
               value={attachmentDraft.fileUrl || ""}
               onChange={(e) => onAttachmentDraftChange({ fileUrl: e.target.value })}
             />
-            <button type="button" onClick={onSubmitAttachment}>{t("attach", "Attach")}</button>
+            <button type="button" onPointerDown={(e) => e.stopPropagation()} onClick={onSubmitAttachment}>{t("attach", "Attach")}</button>
           </div>
           {attachmentDraft.fileObject ? <small>{t("selectedFile", "Selected file: {name}", { name: attachmentDraft.fileObject.name })}</small> : null}
         </div>

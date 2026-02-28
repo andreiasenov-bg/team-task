@@ -175,6 +175,13 @@ const spec = {
         responses: { 200: { description: "Attachment removed" } },
       },
     },
+    "/api/tasks/{taskId}/attachments/{attachmentId}/download": {
+      get: {
+        summary: "Download task attachment",
+        security: [{ bearerAuth: [] }],
+        responses: { 200: { description: "Attachment stream" } },
+      },
+    },
     "/api/tasks/{taskId}/review": {
       patch: {
         summary: "Approve or reject completed task (admin/manager)",

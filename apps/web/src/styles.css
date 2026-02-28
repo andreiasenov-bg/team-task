@@ -970,7 +970,7 @@ button:active {
   border: 0;
   border-radius: 8px;
   padding: 10px;
-  cursor: grab;
+  cursor: default;
   position: relative;
   box-shadow: 0 1px 0 rgba(9, 30, 66, 0.25);
   animation: rise 180ms ease-out;
@@ -981,8 +981,35 @@ button:active {
   background: #f8fafc;
 }
 
-.task:active {
+.task-headline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.drag-handle {
+  width: 26px;
+  min-height: 26px;
+  margin-top: 0;
+  padding: 0;
+  border: 1px solid #d0d9e1;
+  border-radius: 8px;
+  background: #f5f8fb;
+  color: #5c6f86;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: grab;
+}
+
+.drag-handle:active {
   cursor: grabbing;
+}
+
+.drag-handle:hover {
+  border-color: #b5c6d7;
+  background: #e8f0f7;
 }
 
 .task-overlay {
@@ -1151,12 +1178,32 @@ button:active {
   background: #fff;
 }
 
-.attachment-item a {
+.attachment-link {
+  width: 100%;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #1d4f8d;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
   text-decoration: none;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.attachment-link:hover {
+  text-decoration: underline;
+}
+
+.attachment-item-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .attachment-form {
@@ -1705,7 +1752,7 @@ textarea {
     color: #bfd1ef;
   }
 
-  .attachment-item a {
+  .attachment-link {
     color: #9ec5ff;
   }
 
@@ -1856,6 +1903,7 @@ textarea {
   .ghost-btn,
   .secondary-btn,
   .task-btn,
+  .drag-handle,
   .comment-fab,
   .view-switch button {
     border-color: #426176;

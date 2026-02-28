@@ -107,7 +107,19 @@ if [ "$SEEN" != "1" ]; then
   exit 1
 fi
 api_expect_code 201 POST "$NEW_API_BASE/tasks/$TASK_ID/comments" "$EMPLOYEE_TOKEN" "{\"content\":\"Done checklist executed.\"}" >/dev/null
-api_expect_code 201 POST "$NEW_API_BASE/tasks/$TASK_ID/attachments" "$EMPLOYEE_TOKEN" "{\"fileName\":\"e2e-note\",\"fileUrl\":\"https://example.com/e2e\"}" >/dev/null
+BASE64_TEXT="listO e2e attachment"
+BASE64_PAYLOAD="$(printf "%s" "$BASE64_TEXT" | base64 | tr -d '\n')"
+ATTACH_BODY="$(api_expect_code 201 POST "$NEW_API_BASE/tasks/$TASK_ID/attachments" "$EMPLOYEE_TOKEN" "{\"fileName\":\"e2e-note.txt\",\"fileDataBase64\":\"$BASE64_PAYLOAD\",\"originalFileName\":\"e2e-note.txt\",\"mimeType\":\"text/plain\"}")"
+ATTACHMENT_ID="$(node -e 'const x=JSON.parse(process.argv[1]);process.stdout.write((x.attachment&&x.attachment.id)||"")' "$ATTACH_BODY")"
+if [ -z "$ATTACHMENT_ID" ]; then
+  echo "Attachment create returned no id"
+  exit 1
+fi
+DOWNLOADED="$(api_expect_code 200 GET "$NEW_API_BASE/tasks/$TASK_ID/attachments/$ATTACHMENT_ID/download" "$EMPLOYEE_TOKEN")"
+if [ "$DOWNLOADED" != "$BASE64_TEXT" ]; then
+  echo "Attachment download content mismatch"
+  exit 1
+fi
 api_expect_code 200 PATCH "$NEW_API_BASE/tasks/$TASK_ID/status" "$EMPLOYEE_TOKEN" "{\"status\":\"done\",\"position\":3000}" >/dev/null
 echo "ok"
 

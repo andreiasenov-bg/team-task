@@ -54,16 +54,33 @@ function decodeBase64Payload(payload) {
 }
 
 function maybeDeleteLocalAttachment(fileUrl) {
-  const parsed = new URL(fileUrl, config.publicBaseUrl);
-  if (!parsed.pathname.startsWith("/uploads/")) return;
-  const fileName = path.basename(parsed.pathname);
-  if (!fileName) return;
-  const abs = path.join(UPLOADS_DIR, fileName);
+  const abs = resolveLocalAttachmentPath(fileUrl);
+  if (!abs) return;
   try {
     fs.unlinkSync(abs);
   } catch {
     // Ignore missing/unlink errors for already-removed files.
   }
+}
+
+function resolveLocalAttachmentPath(fileUrl) {
+  if (!String(fileUrl || "").trim()) return "";
+  const base = String(config.publicBaseUrl || "http://localhost");
+  let parsed;
+  try {
+    parsed = new URL(fileUrl, base);
+  } catch {
+    return "";
+  }
+  if (!parsed.pathname.startsWith("/uploads/")) return "";
+  const fileName = path.basename(parsed.pathname);
+  if (!fileName) return "";
+  return path.join(UPLOADS_DIR, fileName);
+}
+
+function buildContentDispositionName(fileName) {
+  const safe = sanitizeFileName(fileName, "attachment");
+  return `attachment; filename*=UTF-8''${encodeURIComponent(safe)}`;
 }
 
 function resolveRequestOrigin(req) {
@@ -632,6 +649,37 @@ router.post("/tasks/:taskId/attachments", requireAuth, async (req, res, next) =>
 
     emitToProject(task.project_id, "task.attachment.added", { taskId, attachment, actorId: req.auth.sub });
     res.status(201).json({ attachment });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/tasks/:taskId/attachments/:attachmentId/download", requireAuth, async (req, res, next) => {
+  try {
+    const { taskId, attachmentId } = req.params;
+    const taskResult = await query("select id, project_id, assigned_to from tasks where id = $1 limit 1", [taskId]);
+    const task = taskResult.rows[0];
+    if (!task) throw notFound("Task not found");
+    if (!(await canAccessProject(req.auth, task.project_id))) throw forbidden("No access to this project");
+    if (!canEmployeeAccessOwnTaskOnly(req.auth, task)) throw forbidden("Employees can download only their own task attachments");
+
+    const attachmentRes = await query(
+      "select id, file_name, file_url, mime_type from task_attachments where id = $1 and task_id = $2 limit 1",
+      [attachmentId, taskId]
+    );
+    const attachment = attachmentRes.rows[0];
+    if (!attachment) throw notFound("Attachment not found");
+
+    const localPath = resolveLocalAttachmentPath(attachment.file_url);
+    if (localPath) {
+      if (!fs.existsSync(localPath)) throw notFound("Attachment file not found");
+      res.setHeader("Content-Disposition", buildContentDispositionName(attachment.file_name || "attachment"));
+      res.setHeader("Content-Type", attachment.mime_type || "application/octet-stream");
+      res.setHeader("Cache-Control", "private, no-store");
+      return res.sendFile(localPath);
+    }
+
+    res.redirect(302, attachment.file_url);
   } catch (error) {
     next(error);
   }

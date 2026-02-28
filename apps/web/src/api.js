@@ -154,6 +154,44 @@ export async function deleteTaskAttachment(token, taskId, attachmentId) {
   });
 }
 
+function parseContentDispositionFileName(contentDisposition) {
+  const raw = String(contentDisposition || "");
+  const utfMatch = raw.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utfMatch && utfMatch[1]) {
+    try {
+      return decodeURIComponent(utfMatch[1]);
+    } catch {
+      return utfMatch[1];
+    }
+  }
+  const plainMatch = raw.match(/filename=\"?([^\";]+)\"?/i);
+  return plainMatch && plainMatch[1] ? plainMatch[1] : "";
+}
+
+export async function downloadTaskAttachment(token, taskId, attachmentId) {
+  const response = await fetch(
+    `${API_BASE}/tasks/${encodeURIComponent(taskId)}/attachments/${encodeURIComponent(attachmentId)}/download`,
+    {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    let body = {};
+    try {
+      body = text ? JSON.parse(text) : {};
+    } catch {
+      body = {};
+    }
+    const message = body && body.error ? body.error : text || `HTTP ${response.status}`;
+    throw new Error(message);
+  }
+  const blob = await response.blob();
+  const fileName = parseContentDispositionFileName(response.headers.get("Content-Disposition"));
+  return { blob, fileName };
+}
+
 export async function health() {
   return call("/health");
 }
