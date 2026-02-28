@@ -2904,8 +2904,7 @@ export default function App() {
         </section>
       ) : null}
 
-      {mainSection === "work" ? (
-      viewMode === "board" ? (
+      {mainSection === "work" && viewMode === "board" ? (
         hasProject ? (
           <DndContext
             sensors={sensors}
@@ -2981,7 +2980,9 @@ export default function App() {
             <p className="section-note">{t("noProjectSelectedHint", "Select a project from the top bar to load board and calendar data.")}</p>
           </section>
         )
-      ) : (
+      ) : null}
+
+      {mainSection === "work" && viewMode === "calendar" ? (
         <section ref={calendarSectionRef} id="calendar-view" className="card calendar-panel">
           <div className="calendar-toolbar">
             <button type="button" onClick={() => setCalendarMonthOffset((x) => x - 1)}>{t("prev", "Prev")}</button>
