@@ -17,4 +17,4 @@ Execution checklist:
 - [x] Add calendar loading/error state with Retry action.
 - [x] Guard against stale dialog/panel state across auth transitions.
 - [x] Verify with `npm run build`, `npm run monitor:smoke`, `npm run monitor:e2e`.
-- [ ] Commit and push with clear changelog.
+- [x] Commit and push with clear changelog.
