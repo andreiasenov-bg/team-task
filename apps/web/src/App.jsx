@@ -172,6 +172,7 @@ const I18N = {
     readCleared: "Старите прочетени известия са изчистени",
     taskOpened: "Задачата е отворена",
     taskLinkCopied: "Линкът към задачата е копиран",
+    taskUnavailable: "Задачата не е достъпна за текущата роля или проект.",
     taskApproved: "Задачата е одобрена",
     taskRejected: "Задачата е върната",
     reviewRejectPrompt: "Коментар за връщане (по желание)",
@@ -1929,7 +1930,14 @@ export default function App() {
   useEffect(() => {
     if (!pendingTaskDeepLinkId || !tasks.length) return;
     const match = tasks.find((task) => task.id === pendingTaskDeepLinkId);
-    if (!match) return;
+    if (!match) {
+      setPendingTaskDeepLinkId("");
+      const url = new URL(window.location.href);
+      url.searchParams.delete("task");
+      window.history.replaceState(null, "", url.toString());
+      setError(t("taskUnavailable", "Task is not available for the current role or project."));
+      return;
+    }
     openTaskPanel(match.id, match.title, match.status).finally(() => {
       setPendingTaskDeepLinkId("");
       const url = new URL(window.location.href);
