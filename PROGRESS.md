@@ -3,10 +3,14 @@
 ## Current State
 - Branch: `main`
 - Stack: `web + api + postgres + legacy app` running via Docker
-- Health: API healthy, web reachable, smoke checks passing
+- Health: API healthy, web reachable, smoke + critical e2e passing
 
 ## Latest Completed Checkpoints
-1. Task attachments: links + real file upload + ACL + UI panel
+1. Task attachments hardening:
+- dedicated authenticated download endpoint (`/api/tasks/:taskId/attachments/:attachmentId/download`)
+- drag handle isolation so card DnD no longer breaks attach/download clicks
+- attachment UI actions (`Download` + `Remove`) stabilized for employee/admin flows
+- e2e now validates binary upload + download content equality
 2. Notification UX: severity grouping + summary pills + quick focus actions
 3. Actionable notifications: open/approve/reject directly from notification item
 4. Admin Inbox: pending review + SLA escalated one-click actions
@@ -22,10 +26,9 @@
 ## Remaining High-Value Work (Code)
 1. Production polish pass (UX edge cases + keyboard flow + mobile fit)
 2. Optional: queue/inbox pagination for very large datasets
-3. Optional: E2E regression script for critical flows
+3. Optional: add Playwright UI regression (board/calendar/employee role visual checks)
 
 ## Remaining External Work (Needs You/Infra)
 1. Hetzner VM creation/bootstrap
 2. Domain + SSL + stable webhook URL
 3. Meta WhatsApp production credentials + template approval
-
