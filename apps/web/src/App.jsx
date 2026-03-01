@@ -918,6 +918,7 @@ export default function App() {
       scroll: false,
       closeNotifPanel: false,
       closeRejectDialog: false,
+      closeTaskPanels: false,
       refreshCalendarNow: false,
       ...options,
     };
@@ -925,6 +926,10 @@ export default function App() {
     updateViewUrl(mode, config.replaceUrl);
     if (config.closeNotifPanel) setShowNotifPanel(false);
     if (config.closeRejectDialog) setRejectDialog(null);
+    if (config.closeTaskPanels) {
+      setScheduleEditor(null);
+      setOpenCommentTaskId("");
+    }
     if (config.scroll) scrollToView(mode);
     if (mode === "calendar" && config.refreshCalendarNow) {
       refreshCalendar().catch((e) => setError(e.message));
@@ -1034,13 +1039,19 @@ export default function App() {
   }, [visibleNotifications, lang]);
 
   async function refreshTasks(projectId = selectedProjectId, nextFilters = filters) {
-    if (!token || !projectId) return;
+    if (!token || !projectId) {
+      setTasks([]);
+      return;
+    }
     const data = await listTasks(token, projectId, nextFilters);
     setTasks(data.tasks || []);
   }
 
   async function refreshActivity(projectId = selectedProjectId) {
-    if (!token || !projectId) return;
+    if (!token || !projectId) {
+      setActivity([]);
+      return;
+    }
     const data = await listActivity(token, projectId, 50);
     setActivity(data.activity || []);
   }
@@ -1134,6 +1145,32 @@ export default function App() {
   }, [token, setToken]);
 
   useEffect(() => {
+    if (token) return;
+    setProjects([]);
+    setSelectedProjectId("");
+    setMembers([]);
+    setTasks([]);
+    setActivity([]);
+    setCalendarEvents([]);
+    setCalendarError("");
+    setCalendarLoading(false);
+    setOpenCommentTaskId("");
+    setCommentsByTask({});
+    setCommentDraftByTask({});
+    setAttachmentsByTask({});
+    setAttachmentDraftByTask({});
+    setNotifications([]);
+    setNotifUnread(0);
+    setShowNotifPanel(false);
+    setScheduleEditor(null);
+    setRejectDialog(null);
+    setPendingTaskDeepLinkId("");
+    setMainSection("work");
+    setShowWorkTools(false);
+    setFocusedSection("");
+  }, [token]);
+
+  useEffect(() => {
     if (!token) return;
     listProjects(token)
       .then((data) => {
@@ -1141,19 +1178,23 @@ export default function App() {
         setProjects(next);
         const params = new URLSearchParams(window.location.search || "");
         const queryProjectId = String(params.get("projectId") || "");
-        if (queryProjectId && next.some((p) => p.id === queryProjectId)) {
-          setSelectedProjectId(queryProjectId);
-        } else if (!selectedProjectId && next[0]) {
-          setSelectedProjectId(next[0].id);
-        }
+        const hasQueryProject = Boolean(queryProjectId && next.some((p) => p.id === queryProjectId));
+        setSelectedProjectId((curr) => {
+          if (hasQueryProject) return queryProjectId;
+          if (curr && next.some((p) => p.id === curr)) return curr;
+          return next[0] ? next[0].id : "";
+        });
         const queryTaskId = String(params.get("task") || "");
-        if (queryTaskId) setPendingTaskDeepLinkId(queryTaskId);
+        setPendingTaskDeepLinkId(queryTaskId || "");
       })
       .catch((e) => setError(e.message));
-  }, [token, selectedProjectId]);
+  }, [token]);
 
   useEffect(() => {
-    if (!token || !selectedProjectId) return;
+    if (!token || !selectedProjectId) {
+      setMembers([]);
+      return;
+    }
     listProjectMembers(token, selectedProjectId)
       .then((data) => {
         const nextMembers = data.members || [];
@@ -1307,12 +1348,38 @@ export default function App() {
   }, [viewMode]);
 
   useEffect(() => {
+    if (!token) return;
+    const url = new URL(window.location.href);
+    const current = String(url.searchParams.get("projectId") || "");
+    if (selectedProjectId) {
+      if (current === selectedProjectId) return;
+      url.searchParams.set("projectId", selectedProjectId);
+      window.history.replaceState(null, "", url.toString());
+      return;
+    }
+    if (!current) return;
+    url.searchParams.delete("projectId");
+    window.history.replaceState(null, "", url.toString());
+  }, [token, selectedProjectId]);
+
+  useEffect(() => {
     function onPopState() {
+      setMainSection("work");
+      setShowNotifPanel(false);
+      setRejectDialog(null);
+      setScheduleEditor(null);
       setViewMode(getViewModeFromUrl());
+      const params = new URLSearchParams(window.location.search || "");
+      const queryProjectId = String(params.get("projectId") || "");
+      if (queryProjectId && projects.some((p) => p.id === queryProjectId)) {
+        setSelectedProjectId(queryProjectId);
+      }
+      const queryTaskId = String(params.get("task") || "");
+      setPendingTaskDeepLinkId(queryTaskId || "");
     }
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [projects]);
 
   useEffect(() => {
     if (viewMode !== "calendar") return;
@@ -1334,13 +1401,23 @@ export default function App() {
       }
       if (event.key.toLowerCase() === "b") {
         setMainSection("work");
+        setShowNotifPanel(false);
+        setRejectDialog(null);
+        setScheduleEditor(null);
         setViewMode("board");
       }
       if (event.key.toLowerCase() === "c") {
         setMainSection("work");
+        setShowNotifPanel(false);
+        setRejectDialog(null);
+        setScheduleEditor(null);
+        setOpenCommentTaskId("");
         setViewMode("calendar");
       }
-      if (event.key === "Escape") setRejectDialog(null);
+      if (event.key === "Escape") {
+        setRejectDialog(null);
+        setScheduleEditor(null);
+      }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -1495,7 +1572,7 @@ export default function App() {
   }
 
   function onKpiNavigate(metricKey) {
-    switchView("board", { closeNotifPanel: true, closeRejectDialog: true });
+    switchView("board", { closeNotifPanel: true, closeRejectDialog: true, closeTaskPanels: true });
     setMainSection("work");
     setActiveSavedViewId("");
 
@@ -1645,9 +1722,13 @@ export default function App() {
   function onLogout() {
     setShowNotifPanel(false);
     setRejectDialog(null);
+    setScheduleEditor(null);
+    setOpenCommentTaskId("");
     setFocusedSection("");
     setMainSection("work");
     setShowWorkTools(false);
+    setPendingTaskDeepLinkId("");
+    setCurrentUser(null);
     setToken("");
   }
 
@@ -1915,7 +1996,7 @@ export default function App() {
 
     const nextSearch = taskTitle || "";
     const nextStatus = ["todo", "in_progress", "done"].includes(taskStatus) ? taskStatus : "";
-    switchView("board");
+    switchView("board", { closeTaskPanels: true, closeRejectDialog: true });
     setMainSection("work");
     setSearch(nextSearch);
     setStatusFilter(nextStatus);
@@ -1983,7 +2064,7 @@ export default function App() {
   }
 
   function applyNotifFocus(mode) {
-    switchView("board");
+    switchView("board", { closeTaskPanels: true, closeRejectDialog: true });
     setMainSection("work");
     if (mode === "review_queue") {
       setActiveQuickFilter("review");
@@ -2167,8 +2248,8 @@ export default function App() {
               ))}
             </select>
             <div className="view-switch">
-              <button type="button" onClick={() => { setMainSection("work"); switchView("board", { scroll: true, closeNotifPanel: true }); }} className={viewMode === "board" ? "active" : ""}>{t("board", "Board")}</button>
-              <button type="button" onClick={() => { setMainSection("work"); switchView("calendar", { scroll: true, closeNotifPanel: true, closeRejectDialog: true }); }} className={viewMode === "calendar" ? "active" : ""}>{t("calendar", "Calendar")}</button>
+              <button type="button" onClick={() => { setMainSection("work"); switchView("board", { scroll: true, closeNotifPanel: true, closeRejectDialog: true, closeTaskPanels: true }); }} className={viewMode === "board" ? "active" : ""}>{t("board", "Board")}</button>
+              <button type="button" onClick={() => { setMainSection("work"); switchView("calendar", { scroll: true, closeNotifPanel: true, closeRejectDialog: true, closeTaskPanels: true }); }} className={viewMode === "calendar" ? "active" : ""}>{t("calendar", "Calendar")}</button>
             </div>
             <div className="view-switch lang-switch">
               <button type="button" className={lang === "bg" ? "active" : ""} onClick={() => setUiLang("bg")}>BG</button>
