@@ -50,6 +50,33 @@ api_expect_code() {
   printf "%s" "$body"
 }
 
+cleanup_stale_e2e_tasks() {
+  local project_id="$1"
+  local admin_token="$2"
+  local manager_token="$3"
+  local tasks_json
+  local stale_rows
+
+  tasks_json="$(api_expect_code 200 GET "$NEW_API_BASE/tasks?projectId=$project_id&includeArchived=1" "$admin_token")"
+  stale_rows="$(node -e 'const x=JSON.parse(process.argv[1]);const rows=(x.tasks||[]).filter((t)=>!t.archived_at && /^E2E (Critical|Foreign) /.test(String(t.title||""))); for (const t of rows) { process.stdout.write([t.id,t.status||"",t.review_status||""].join("|")+"\n"); }' "$tasks_json")"
+
+  if [ -z "$stale_rows" ]; then
+    return 0
+  fi
+
+  echo "cleanup: archiving stale E2E tasks"
+  while IFS='|' read -r stale_id stale_status stale_review; do
+    [ -z "$stale_id" ] && continue
+    if [ "$stale_status" != "done" ]; then
+      api_expect_code 200 PATCH "$NEW_API_BASE/tasks/$stale_id/status" "$manager_token" "{\"status\":\"done\",\"position\":2000}" >/dev/null
+    fi
+    if [ "$stale_review" != "approved" ]; then
+      api_expect_code 200 PATCH "$NEW_API_BASE/tasks/$stale_id/review" "$manager_token" "{\"decision\":\"approve\",\"comment\":\"E2E stale cleanup\"}" >/dev/null
+    fi
+    api_expect_code 200 PATCH "$NEW_API_BASE/tasks/$stale_id/archive" "$manager_token" "{\"archived\":true}" >/dev/null
+  done <<< "$stale_rows"
+}
+
 echo "== health =="
 api_expect_code 200 GET "$NEW_API_BASE/health" "" >/dev/null
 echo "ok"
@@ -63,8 +90,18 @@ EMPLOYEE_LOGIN="$(api_expect_code 200 POST "$NEW_API_BASE/auth/login" "" "{\"ema
 ADMIN_TOKEN="$(node -e 'const x=JSON.parse(process.argv[1]);process.stdout.write(x.token||"")' "$ADMIN_LOGIN")"
 MANAGER_TOKEN="$(node -e 'const x=JSON.parse(process.argv[1]);process.stdout.write(x.token||"")' "$MANAGER_LOGIN")"
 EMPLOYEE_TOKEN="$(node -e 'const x=JSON.parse(process.argv[1]);process.stdout.write(x.token||"")' "$EMPLOYEE_LOGIN")"
+ADMIN_ID="$(node -e 'const x=JSON.parse(process.argv[1]);process.stdout.write((x.user&&x.user.id)||"")' "$ADMIN_LOGIN")"
+MANAGER_ID="$(node -e 'const x=JSON.parse(process.argv[1]);process.stdout.write((x.user&&x.user.id)||"")' "$MANAGER_LOGIN")"
 if [ -z "$ADMIN_TOKEN" ] || [ -z "$MANAGER_TOKEN" ] || [ -z "$EMPLOYEE_TOKEN" ]; then
   echo "Missing one or more auth tokens"
+  exit 1
+fi
+if [ -z "$ADMIN_ID" ]; then
+  echo "Missing admin user id"
+  exit 1
+fi
+if [ -z "$MANAGER_ID" ]; then
+  echo "Missing manager user id"
   exit 1
 fi
 echo "ok"
@@ -86,6 +123,8 @@ if [ -z "$EMPLOYEE_ID" ]; then
 fi
 echo "project=$PROJECT_ID"
 
+cleanup_stale_e2e_tasks "$PROJECT_ID" "$ADMIN_TOKEN" "$MANAGER_TOKEN"
+
 echo
 echo "== create task (admin -> employee) =="
 TITLE="E2E Critical $(date +%s)"
@@ -97,6 +136,15 @@ if [ -z "$TASK_ID" ]; then
   exit 1
 fi
 echo "task=$TASK_ID"
+
+FOREIGN_TITLE="E2E Foreign $(date +%s)"
+FOREIGN_BODY="$(api_expect_code 201 POST "$NEW_API_BASE/tasks" "$ADMIN_TOKEN" "{\"projectId\":\"$PROJECT_ID\",\"assignedTo\":\"$MANAGER_ID\",\"title\":\"$FOREIGN_TITLE\",\"description\":\"ACL foreign task\",\"priority\":\"low\",\"status\":\"todo\"}")"
+FOREIGN_TASK_ID="$(node -e 'const x=JSON.parse(process.argv[1]);process.stdout.write((x.task&&x.task.id)||"")' "$FOREIGN_BODY")"
+if [ -z "$FOREIGN_TASK_ID" ]; then
+  echo "Foreign task create returned no id"
+  exit 1
+fi
+echo "foreign_task=$FOREIGN_TASK_ID"
 
 echo
 echo "== employee flow: list/comment/attach/move done =="
@@ -125,12 +173,6 @@ echo "ok"
 
 echo
 echo "== ACL checks (employee forbidden on foreign + review) =="
-ADMIN_TASKS="$(api_expect_code 200 GET "$NEW_API_BASE/tasks?projectId=$PROJECT_ID" "$ADMIN_TOKEN")"
-FOREIGN_TASK_ID="$(node -e 'const x=JSON.parse(process.argv[1]);const emp=process.argv[2];const t=(x.tasks||[]).find((row)=>!row.archived_at && (row.assigned_to!==emp));process.stdout.write(t?t.id:"")' "$ADMIN_TASKS" "$EMPLOYEE_ID")"
-if [ -z "$FOREIGN_TASK_ID" ]; then
-  echo "No foreign task found for ACL validation"
-  exit 1
-fi
 api_expect_code 403 POST "$NEW_API_BASE/tasks/$FOREIGN_TASK_ID/comments" "$EMPLOYEE_TOKEN" "{\"content\":\"should fail\"}" >/dev/null
 api_expect_code 403 GET "$NEW_API_BASE/tasks/$FOREIGN_TASK_ID/attachments" "$EMPLOYEE_TOKEN" >/dev/null
 api_expect_code 403 PATCH "$NEW_API_BASE/tasks/$TASK_ID/review" "$EMPLOYEE_TOKEN" "{\"decision\":\"approve\",\"comment\":\"n/a\"}" >/dev/null
@@ -140,10 +182,18 @@ echo
 echo "== manager review + archive =="
 api_expect_code 200 PATCH "$NEW_API_BASE/tasks/$TASK_ID/review" "$MANAGER_TOKEN" "{\"decision\":\"approve\",\"comment\":\"Looks good.\"}" >/dev/null
 api_expect_code 200 PATCH "$NEW_API_BASE/tasks/$TASK_ID/archive" "$MANAGER_TOKEN" "{\"archived\":true}" >/dev/null
+api_expect_code 200 PATCH "$NEW_API_BASE/tasks/$FOREIGN_TASK_ID/status" "$MANAGER_TOKEN" "{\"status\":\"done\",\"position\":2500}" >/dev/null
+api_expect_code 200 PATCH "$NEW_API_BASE/tasks/$FOREIGN_TASK_ID/review" "$MANAGER_TOKEN" "{\"decision\":\"approve\",\"comment\":\"ACL cleanup\"}" >/dev/null
+api_expect_code 200 PATCH "$NEW_API_BASE/tasks/$FOREIGN_TASK_ID/archive" "$MANAGER_TOKEN" "{\"archived\":true}" >/dev/null
 FINAL_TASKS="$(api_expect_code 200 GET "$NEW_API_BASE/tasks?projectId=$PROJECT_ID&includeArchived=1" "$ADMIN_TOKEN")"
 FINAL_OK="$(node -e 'const x=JSON.parse(process.argv[1]);const id=process.argv[2];const t=(x.tasks||[]).find((row)=>row.id===id);const ok=Boolean(t&&t.review_status==="approved"&&t.archived_at);process.stdout.write(ok?"1":"0")' "$FINAL_TASKS" "$TASK_ID")"
 if [ "$FINAL_OK" != "1" ]; then
   echo "Final task state invalid (expected approved + archived)"
+  exit 1
+fi
+FOREIGN_ARCHIVED="$(node -e 'const x=JSON.parse(process.argv[1]);const id=process.argv[2];const t=(x.tasks||[]).find((row)=>row.id===id);process.stdout.write((t&&t.archived_at)?"1":"0")' "$FINAL_TASKS" "$FOREIGN_TASK_ID")"
+if [ "$FOREIGN_ARCHIVED" != "1" ]; then
+  echo "Foreign ACL task was not archived"
   exit 1
 fi
 echo "ok"
