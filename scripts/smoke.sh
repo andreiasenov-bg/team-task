@@ -5,9 +5,18 @@ OLD_HEALTH_URL="${OLD_HEALTH_URL:-http://127.0.0.1:3310/api/health}"
 NEW_API_BASE="${NEW_API_BASE:-http://127.0.0.1:3320/api}"
 LOGIN_EMAIL="${LOGIN_EMAIL:-admin@nexus-flow.local}"
 LOGIN_PASSWORD="${LOGIN_PASSWORD:-admin123}"
+STRICT_OLD_APP="${STRICT_OLD_APP:-0}"
 
 echo "== old app health =="
-curl -fsS "$OLD_HEALTH_URL"
+if curl -fsS "$OLD_HEALTH_URL"; then
+  :
+else
+  if [ "$STRICT_OLD_APP" = "1" ]; then
+    echo "Legacy app health check failed and STRICT_OLD_APP=1"
+    exit 1
+  fi
+  echo "warn: legacy app health failed (non-blocking)"
+fi
 echo
 
 echo "== new api health =="

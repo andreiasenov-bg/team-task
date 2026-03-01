@@ -47,6 +47,7 @@ What it checks:
 - Smoke: `npm run monitor:smoke`
 - Critical e2e: `npm run monitor:e2e`
 - Final checks: `npm run monitor:final`
+- Strict legacy check (optional): `STRICT_OLD_APP=1 npm run monitor:smoke`
 
 ## Key Features
 
@@ -77,4 +78,3 @@ What it checks:
 
 - CI regression (smoke + e2e) is configured in GitHub Actions.
 - Production deploy instructions and Hetzner scripts are in `DEPLOY.md`.
-
