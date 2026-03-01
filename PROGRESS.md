@@ -11,11 +11,16 @@
 - drag handle isolation so card DnD no longer breaks attach/download clicks
 - attachment UI actions (`Download` + `Remove`) stabilized for employee/admin flows
 - e2e now validates binary upload + download content equality
-2. Notification UX: severity grouping + summary pills + quick focus actions
-3. Actionable notifications: open/approve/reject directly from notification item
-4. Admin Inbox: pending review + SLA escalated one-click actions
-5. Smart Quick Filters: one-click presets for board navigation
-6. Unified status command: `npm run monitor:status`
+2. Employee navigation hardening:
+- robust auth transition reset (clears stale popups/panels after role switch/logout)
+- project selection auto-recovers if previous project is no longer accessible
+- board/calendar switches now close transient task panels to avoid stuck overlays
+- deep-link `task` param auto-clears when task is not visible for the current role/project
+3. Notification UX: severity grouping + summary pills + quick focus actions
+4. Actionable notifications: open/approve/reject directly from notification item
+5. Admin Inbox: pending review + SLA escalated one-click actions
+6. Smart Quick Filters: one-click presets for board navigation
+7. Unified status command: `npm run monitor:status`
 
 ## How To Monitor Right Now
 1. `cd /Users/O-connect/Downloads/TASK-Team`
